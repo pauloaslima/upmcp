@@ -9,6 +9,7 @@ import WeekContent from "./WeekContent";
 import ClientChecklist from "./ClientChecklist";
 import DeadlinesOverview, { LeadTimeBanner } from "./DeadlinesOverview";
 import Notifications from "./Notifications";
+import { PasswordForm } from "./Login";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -62,6 +63,7 @@ export default function AppShell({ session, profile }) {
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
   const [team, setTeam] = useState([]); // administradores e funcionários (responsáveis pelos clientes)
+  const [changingPw, setChangingPw] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
 
@@ -301,6 +303,9 @@ export default function AppShell({ session, profile }) {
               <span>{profile.full_name || session.user.email}</span>
               <small>{ROLE_LABELS[profile.role]}</small>
             </div>
+            <button className="side-logout" onClick={() => setChangingPw(true)} title="Trocar minha senha">
+              Minha senha
+            </button>
             <button className="side-logout" onClick={() => supabase.auth.signOut()}>
               Sair
             </button>
@@ -427,6 +432,22 @@ export default function AppShell({ session, profile }) {
           )}
         </main>
       </div>
+
+      {changingPw && (
+        <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && setChangingPw(false)}>
+          <div className="modal modal-sm" style={{ padding: 24 }}>
+            <PasswordForm
+              title="Trocar minha senha"
+              text={session.user.email}
+              onCancel={() => setChangingPw(false)}
+              onDone={() => {
+                setChangingPw(false);
+                showToast("Senha trocada.");
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className={"toast" + (toast ? " show" : "")}>{toast}</div>
     </div>

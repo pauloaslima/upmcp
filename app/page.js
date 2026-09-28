@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import Login from "../components/Login";
+import Login, { PasswordForm } from "../components/Login";
 import AppShell from "../components/AppShell";
 
 function Centered({ children }) {
@@ -16,10 +16,12 @@ function Centered({ children }) {
 export default function Home() {
   const [session, setSession] = useState(undefined); // undefined = ainda carregando
   const [profile, setProfile] = useState(undefined);
+  const [recovering, setRecovering] = useState(false); // chegou pelo link de "esqueci minha senha"
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
       setSession(session);
     });
     return () => sub.subscription.unsubscribe();
@@ -61,6 +63,21 @@ export default function Home() {
   }
 
   if (!session) return <Login />;
+
+  if (recovering) {
+    return (
+      <Centered>
+        <div className="login-card">
+          <div className="mark">U!</div>
+          <PasswordForm
+            title="Crie sua nova senha"
+            text={"Conta: " + session.user.email}
+            onDone={() => setRecovering(false)}
+          />
+        </div>
+      </Centered>
+    );
+  }
 
   const role = profile?.role;
   if (!role || (role === "cliente" && !profile.client_id)) {

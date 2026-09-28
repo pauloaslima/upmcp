@@ -20,11 +20,28 @@ async function callAdminApi(method, body) {
   return res.ok ? { ok: true, ...json } : { ok: false, error: json.error || "Algo deu errado." };
 }
 
-// Tela do administrador: convidar pessoas, definir papel e a qual cliente cada uma pertence.
+// Senha aleatória fácil de ditar: sem letras parecidas (l, I, O, 0), com letras e números
+function generatePassword() {
+  const letters = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
+  const digits = "23456789";
+  const all = letters + digits;
+  const pick = (set) => set[crypto.getRandomValues(new Uint32Array(1))[0] % set.length];
+  let pw = pick(letters) + pick(digits);
+  while (pw.length < 10) pw += pick(all);
+  return pw
+    .split("")
+    .sort(() => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 - 0.5)
+    .join("");
+}
+
+const EMPTY_FORM = { email: "", full_name: "", password: "", role: "funcionario", client_id: "" };
+
+// Tela do administrador: criar logins, definir papel e a qual cliente cada pessoa pertence.
 export default function UsersAdmin({ me, clients, showToast }) {
   const [profiles, setProfiles] = useState([]);
-  const [form, setForm] = useState({ email: "", full_name: "", role: "funcionario", client_id: "" });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [sending, setSending] = useState(false);
+  const [credentials, setCredentials] = useState(null); // login e senha recém-criados, para repassar
 
   async function load() {
     const { data, error } = await supabase.from("profiles").select("*").order("created_at");
@@ -55,9 +72,31 @@ export default function UsersAdmin({ me, clients, showToast }) {
       showToast(res.error);
       return;
     }
-    showToast(res.invited ? "Convite enviado para " + form.email + "." : "Acesso atualizado para " + form.email + ".");
-    setForm({ email: "", full_name: "", role: form.role, client_id: form.client_id });
+    showToast(res.created ? "Usuário criado." : "Esse e-mail já tinha acesso: senha e permissões atualizadas.");
+    setCredentials({ name: form.full_name || form.email, email: form.email.trim().toLowerCase(), password: form.password });
+    setForm({ ...EMPTY_FORM, role: form.role, client_id: form.client_id });
     load();
+  }
+
+  async function newPassword(p) {
+    const suggestion = generatePassword();
+    const password = prompt(`Nova senha para ${p.full_name || p.email} (mínimo 8 caracteres, letras e números):`, suggestion);
+    if (!password) return;
+    const res = await callAdminApi("PATCH", { user_id: p.id, password });
+    if (!res.ok) {
+      showToast(res.error);
+      return;
+    }
+    setCredentials({ name: p.full_name || p.email, email: p.email, password });
+    showToast("Senha trocada.");
+  }
+
+  function copyCredentials() {
+    const text = `Acesso ao Up! Fluxo\nEndereço: ${window.location.origin}\nLogin: ${credentials.email}\nSenha: ${credentials.password}\n\nNo primeiro acesso, troque a senha em "Minha senha", no rodapé do menu.`;
+    navigator.clipboard?.writeText(text).then(
+      () => showToast("Copiado. Cole no WhatsApp ou e-mail da pessoa."),
+      () => showToast("Não consegui copiar; anote os dados na tela.")
+    );
   }
 
   async function patch(p, values) {
@@ -87,19 +126,37 @@ export default function UsersAdmin({ me, clients, showToast }) {
   return (
     <div className="users">
       <form className="users-invite" onSubmit={invite}>
-        <h3>Convidar pessoa</h3>
+        <h3>Criar usuário</h3>
         <p className="hint">
-          A pessoa recebe um e-mail com o link de acesso. Não existe senha: sempre que quiser entrar, ela pede um novo
-          link na tela de login.
+          O e-mail é o login. Você define a senha e repassa para a pessoa; ela pode trocar depois em “Minha senha”. Se
+          esquecer, ela mesma pede uma nova na tela de entrada.
         </p>
         <div className="users-form">
           <div>
-            <label htmlFor="inv-email">E-mail</label>
-            <input id="inv-email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="pessoa@exemplo.com" />
-          </div>
-          <div>
             <label htmlFor="inv-name">Nome</label>
             <input id="inv-name" type="text" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Como aparece nas observações" />
+          </div>
+          <div>
+            <label htmlFor="inv-email">E-mail (login)</label>
+            <input id="inv-email" type="email" required autoComplete="off" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="pessoa@exemplo.com" />
+          </div>
+          <div>
+            <label htmlFor="inv-pw">Senha</label>
+            <div className="pw-field">
+              <input
+                id="inv-pw"
+                type="text"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder="mín. 8, letras e números"
+              />
+              <button type="button" className="pw-toggle" onClick={() => setForm({ ...form, password: generatePassword() })}>
+                gerar
+              </button>
+            </div>
           </div>
           <div>
             <label htmlFor="inv-role">Tipo de usuário</label>
@@ -126,8 +183,27 @@ export default function UsersAdmin({ me, clients, showToast }) {
           )}
         </div>
         <button className="btn btn-gold" type="submit" disabled={sending}>
-          {sending ? "Enviando…" : "Enviar convite"}
+          {sending ? "Criando…" : "Criar usuário"}
         </button>
+
+        {credentials && (
+          <div className="credentials">
+            <div>
+              <strong>Acesso de {credentials.name}</strong>
+              <div className="mono">Login: {credentials.email}</div>
+              <div className="mono">Senha: {credentials.password}</div>
+              <div className="hint">Repasse esses dados para a pessoa. Por segurança, a senha não fica visível depois que você sair desta tela.</div>
+            </div>
+            <div className="credentials-actions">
+              <button type="button" className="btn btn-gold" onClick={copyCredentials}>
+                Copiar mensagem
+              </button>
+              <button type="button" className="btn btn-plain" onClick={() => setCredentials(null)}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        )}
       </form>
 
       <div className="users-list">
@@ -162,13 +238,20 @@ export default function UsersAdmin({ me, clients, showToast }) {
                 ) : (
                   <span className="user-scope">{p.role ? "vê todos os clientes" : "—"}</span>
                 )}
-                {!self ? (
-                  <button className="btn btn-plain danger" onClick={() => removeUser(p)}>
-                    Remover
-                  </button>
-                ) : (
-                  <span className="user-scope">você</span>
-                )}
+                <div className="user-actions">
+                  {!self && (
+                    <button className="btn btn-plain" onClick={() => newPassword(p)}>
+                      Nova senha
+                    </button>
+                  )}
+                  {!self ? (
+                    <button className="btn btn-plain danger" onClick={() => removeUser(p)}>
+                      Remover
+                    </button>
+                  ) : (
+                    <span className="user-scope">você</span>
+                  )}
+                </div>
               </div>
             );
           })}
