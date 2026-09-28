@@ -6,7 +6,6 @@ import {
   COLUMNS,
   COL_INDEX,
   FORMATS,
-  KNOWN_CLIENTS,
   defaultCard
 } from "../lib/pipeline";
 
@@ -24,11 +23,13 @@ function checklistProgress(card) {
   return { done, total: list.length };
 }
 
-export default function Board({ session }) {
+// client: nome do cliente quando o quadro é aberto dentro de um cliente (filtro fixo);
+// null quando é o quadro geral de produção.
+export default function Board({ client, clientNames }) {
   const [cards, setCards] = useState({}); // id -> card
-  const [connected, setConnected] = useState(false);
   const [search, setSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState("");
+  const [pickedClient, setPickedClient] = useState("");
+  const clientFilter = client || pickedClient;
   const [openId, setOpenId] = useState(null); // card being edited, or "__new__:<column>"
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
@@ -57,7 +58,6 @@ export default function Board({ session }) {
         map[row.id] = row;
       });
       setCards(map);
-      setConnected(true);
     }
     load();
 
@@ -78,10 +78,7 @@ export default function Board({ session }) {
           });
         }
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") setConnected(true);
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setConnected(false);
-      });
+      .subscribe();
 
     return () => {
       alive = false;
@@ -90,10 +87,10 @@ export default function Board({ session }) {
   }, []);
 
   const clientOptions = useMemo(() => {
-    const set = new Set(KNOWN_CLIENTS);
+    const set = new Set(clientNames);
     Object.values(cards).forEach((c) => c.client && set.add(c.client));
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [cards]);
+  }, [cards, clientNames]);
 
   function matchesFilters(card) {
     if (clientFilter && card.client !== clientFilter) return false;
@@ -170,44 +167,32 @@ export default function Board({ session }) {
   }
 
   async function handleNewCard(columnId) {
-    const card = await createCard(columnId);
+    const card = await createCard(columnId, client ? { client } : undefined);
     if (card) setOpenId(card.id);
   }
 
   const openCard = openId ? cards[openId] : null;
 
   return (
-    <div>
-      <div className="topbar">
-        <div className="brand">
-          <span className="mark">U!</span>
-          <div>
-            <h1>Up! Fluxo</h1>
-            <div className="sub">produção de conteúdo &middot; Up! Digital</div>
-          </div>
-        </div>
+    <div className="board-page">
+      <div className="toolbar">
         <input
           type="search"
-          placeholder="Buscar peça, cliente, ID…"
+          placeholder="Buscar peça…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
-          <option value="">Todos os clientes</option>
-          {clientOptions.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <span className="status-pill">
-          <span className={"status-dot" + (connected ? "" : " off")}></span>
-          {connected ? "conectado" : "conectando…"}
-        </span>
-        <button className="btn btn-ghost" onClick={() => supabase.auth.signOut()}>
-          Sair
-        </button>
-        <button className="btn btn-gold" onClick={() => handleNewCard("calendario")}>
+        {!client && (
+          <select value={pickedClient} onChange={(e) => setPickedClient(e.target.value)}>
+            <option value="">Todos os clientes</option>
+            {clientOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
+        <button className="btn btn-gold" onClick={() => handleNewCard("estruturacao")}>
           + Nova peça
         </button>
       </div>
@@ -238,6 +223,7 @@ export default function Board({ session }) {
             setOpenId(null);
           }}
           showToast={showToast}
+          clientNames={clientOptions}
         />
       )}
 
@@ -322,7 +308,7 @@ function CardTile({ card, onOpen, dragCardId }) {
   );
 }
 
-function CardModal({ card, onClose, onSave, onDelete, showToast }) {
+function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) {
   const [local, setLocal] = useState(card);
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -449,7 +435,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast }) {
                 placeholder="Nome do cliente"
               />
               <datalist id="clientsList">
-                {KNOWN_CLIENTS.map((c) => (
+                {clientNames.map((c) => (
                   <option key={c} value={c} />
                 ))}
               </datalist>

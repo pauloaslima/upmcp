@@ -25,6 +25,8 @@ Nenhuma das duas guarda seu cartão de crédito no plano gratuito.
    cole no editor do Supabase e clique em **Run**.
    - Isso cria a tabela de peças, as regras de segurança (só quem está
      logado acessa) e o espaço de arquivos.
+   - Depois, faça o mesmo com `supabase/002_calendario.sql` (cria os
+     clientes e o calendário de temas de cada um).
 6. Vá em **Storage** no menu lateral e confirme que o bucket **anexos** foi
    criado (o script do passo 5 já cria; se não aparecer, crie manualmente com
    esse nome exato, marcado como **privado**).

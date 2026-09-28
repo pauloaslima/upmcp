@@ -47,7 +47,7 @@ button { font-family: inherit; cursor: pointer; }
 .topbar {
   position: sticky; top: 0; z-index: 20;
   background: var(--ink); color: #F6F5F2;
-  padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 14px; flex: none;
   border-bottom: 1px solid rgba(0,0,0,.2);
 }
 .brand { display: flex; align-items: baseline; gap: 8px; margin-right: auto; }
@@ -76,7 +76,8 @@ button { font-family: inherit; cursor: pointer; }
 .status-dot.off { background: var(--terracotta); }
 
 /* board */
-.board-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; height: calc(100vh - 62px); }
+.board-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.board-wrap { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .board { flex: 1; display: flex; gap: 14px; padding: 16px; overflow-x: auto; overflow-y: hidden; align-items: flex-start; }
 .column { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); width: 290px; min-width: 290px; max-height: 100%; display: flex; flex-direction: column; box-shadow: var(--shadow); }
 .column.drop-hover { outline: 2px dashed var(--gold); outline-offset: -4px; }

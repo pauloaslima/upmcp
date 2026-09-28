@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Login from "../components/Login";
-import Board from "../components/Board";
+import AppShell from "../components/AppShell";
 
 export default function Home() {
   const [session, setSession] = useState(undefined); // undefined = ainda carregando
@@ -26,5 +26,5 @@ export default function Home() {
 
   if (!session) return <Login />;
 
-  return <Board session={session} />;
+  return <AppShell session={session} />;
 }
