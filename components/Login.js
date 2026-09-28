@@ -15,7 +15,12 @@ export default function Login() {
     setStatus(null);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false }
+      options: {
+        shouldCreateUser: false,
+        // Volta para o mesmo endereço de onde a pessoa pediu o link
+        // (localhost no teste, o domínio do Vercel em produção).
+        emailRedirectTo: window.location.origin
+      }
     });
     setSending(false);
     if (error) {
