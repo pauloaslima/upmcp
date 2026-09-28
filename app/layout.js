@@ -1,5 +1,6 @@
 import "./globals.css";
 import "./shell.css";
+import "./prazos.css";
 
 export const metadata = {
   title: "Up! Fluxo",

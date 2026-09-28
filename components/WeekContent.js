@@ -4,35 +4,38 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { isoDate, specialDates } from "../lib/holidays";
 import { COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
+import { addDays, iso, mondayOf, parse, productionWeek, rangeLabel, shortDate, taskStatus, weeklyTasks } from "../lib/deadlines";
 import { useCalendarEntries } from "../lib/useCalendarEntries";
+import { useClientTasks } from "../lib/useClientTasks";
 import { EntryChip, EntryEditor, SpecialDates, WEEKDAYS } from "./Calendar";
 
-function mondayOf(date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d;
-}
-function addDays(date, n) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-}
-const short = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
+const STEP_SHORT = { design: "Design", ajustes: "Ajustes", aprovacao: "Aprovação" };
 
-// Conteúdo da semana: os temas da semana (vindos do calendário mensal) viram peças
-// na linha de produção do cliente com um clique.
-export default function WeekContent({ client, showToast, onOpenProduction }) {
-  const [monday, setMonday] = useState(() => mondayOf(new Date()));
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday]);
-  const first = isoDate(days[0]);
-  const last = isoDate(days[6]);
+// Conteúdo da semana.
+// Equipe: 4 semanas (segunda a domingo), com os prazos de produção de cada uma
+// (2 semanas antes: design até quarta, ajustes quinta, aprovação sexta) e o botão que
+// transforma os temas em peças na linha de produção.
+// Cliente: só a semana atual, para consulta.
+export default function WeekContent({ client, isStaff, showToast, onOpenProduction }) {
+  const todayIso = iso(new Date());
+  const thisMonday = mondayOf(parse(todayIso));
+  const [start, setStart] = useState(thisMonday);
+  const weekCount = isStaff ? 4 : 1;
+  const weeks = useMemo(
+    () => Array.from({ length: weekCount }, (_, w) => Array.from({ length: 7 }, (_, d) => addDays(isStaff ? start : thisMonday, w * 7 + d))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [start, weekCount, isStaff]
+  );
+  const first = iso(weeks[0][0]);
+  const last = iso(weeks[weeks.length - 1][6]);
   const { entries, create, update, remove } = useCalendarEntries(client.id, first, last, showToast);
-  const [cards, setCards] = useState({}); // peças ligadas aos temas
+  const tasks = useClientTasks(isStaff ? client.id : false, iso(addDays(parse(first), -1)), showToast);
+  const [cards, setCards] = useState({});
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
-  const today = isoDate(new Date());
 
-  const linkedIds = entries.map((e) => e.card_id).filter(Boolean).sort().join(",");
+  // situação das peças já criadas a partir dos temas (só a equipe enxerga)
+  const linkedIds = isStaff ? entries.map((e) => e.card_id).filter(Boolean).sort().join(",") : "";
   useEffect(() => {
     if (!linkedIds) {
       setCards({});
@@ -45,9 +48,7 @@ export default function WeekContent({ client, showToast, onOpenProduction }) {
       .in("id", linkedIds.split(","))
       .then(({ data }) => {
         if (!alive) return;
-        const map = {};
-        (data || []).forEach((c) => (map[c.id] = c));
-        setCards(map);
+        setCards(Object.fromEntries((data || []).map((c) => [c.id, c])));
       });
     return () => {
       alive = false;
@@ -61,7 +62,10 @@ export default function WeekContent({ client, showToast, onOpenProduction }) {
     return map;
   }, [entries]);
 
-  const pending = entries.filter((e) => e.theme && !(e.card_id && cards[e.card_id]));
+  const special = useMemo(() => {
+    const years = new Set([weeks[0][0].getFullYear(), weeks[weeks.length - 1][6].getFullYear()]);
+    return Object.assign({}, ...[...years].map((y) => specialDates(y)));
+  }, [weeks]);
 
   async function toProduction(entry) {
     const { data: card, error } = await supabase
@@ -81,15 +85,16 @@ export default function WeekContent({ client, showToast, onOpenProduction }) {
       showToast("Não consegui criar a peça.");
       return false;
     }
-    if (entry.notes) {
-      await supabase.from("card_comments").insert({ card_id: card.id, body: "Do calendário: " + entry.notes });
-    }
+    if (entry.notes) await supabase.from("card_comments").insert({ card_id: card.id, body: "Do calendário: " + entry.notes });
     await update(entry.id, { card_id: card.id });
     setCards((prev) => ({ ...prev, [card.id]: card }));
     return true;
   }
 
-  async function allToProduction() {
+  async function sendWeek(days) {
+    const keys = new Set(days.map(iso));
+    const pending = entries.filter((e) => keys.has(e.day) && e.theme && !(e.card_id && cards[e.card_id]));
+    if (!pending.length) return;
     setBusy(true);
     let n = 0;
     for (const entry of pending) if (await toProduction(entry)) n++;
@@ -97,76 +102,124 @@ export default function WeekContent({ client, showToast, onOpenProduction }) {
     showToast(n + (n === 1 ? " peça criada" : " peças criadas") + " em “Em estruturação”.");
   }
 
-  const special = { ...specialDates(days[0].getFullYear()), ...specialDates(days[6].getFullYear()) };
-
   return (
     <div className="cal week">
       <div className="cal-head">
-        <button className="cal-nav" onClick={() => setMonday((m) => addDays(m, -7))} aria-label="Semana anterior">
-          ‹
-        </button>
-        <h2 className="cal-title">
-          Semana {short(days[0])} <span>a</span> {short(days[6])}
-        </h2>
-        <button className="cal-nav" onClick={() => setMonday((m) => addDays(m, 7))} aria-label="Próxima semana">
-          ›
-        </button>
-        <button className="cal-today" onClick={() => setMonday(mondayOf(new Date()))}>
-          Semana atual
-        </button>
+        {isStaff && (
+          <button className="cal-nav" onClick={() => setStart((s) => addDays(s, -7))} aria-label="Semana anterior">
+            ‹
+          </button>
+        )}
+        <h2 className="cal-title">{isStaff ? `${rangeLabel(first, last)}` : `Semana ${rangeLabel(first, last)}`}</h2>
+        {isStaff && (
+          <>
+            <button className="cal-nav" onClick={() => setStart((s) => addDays(s, 7))} aria-label="Próxima semana">
+              ›
+            </button>
+            <button className="cal-today" onClick={() => setStart(thisMonday)}>
+              A partir de hoje
+            </button>
+          </>
+        )}
       </div>
 
-      <div className="week-bar">
-        <span>
-          {entries.length === 0
-            ? "Nenhum tema nesta semana. Adicione pelo + de cada dia ou pelo calendário mensal."
-            : `${entries.length} tema(s) · ${pending.length} ainda sem peça na produção`}
-        </span>
-        <div className="week-bar-actions">
-          <button className="btn btn-plain" onClick={onOpenProduction}>
-            Ver linha de produção
-          </button>
-          <button className="btn btn-gold" disabled={busy || pending.length === 0} onClick={allToProduction}>
-            {busy ? "Criando…" : "Enviar todos para a produção"}
-          </button>
+      {isStaff && (
+        <div className="week-bar">
+          <span>
+            Conteúdo sempre com <strong>2 semanas de antecedência</strong>: design até quarta, ajustes na quinta e envio ao cliente na sexta da
+            semana de produção.
+          </span>
+          <div className="week-bar-actions">
+            <button className="btn btn-plain" onClick={onOpenProduction}>
+              Ver linha de produção
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="week-days">
-        {days.map((d) => {
-          const key = isoDate(d);
-          const list = byDay[key] || [];
-          return (
-            <div key={key} className={"week-day" + (key === today ? " is-today" : "")}>
-              <div className="week-day-head">
-                <span className="cal-daynum">{d.getDate()}</span>
-                <strong>{WEEKDAYS[d.getDay()]}</strong>
-                <button className="cal-add visible" title="Adicionar tema" onClick={() => setEditing({ day: key })}>
-                  +
-                </button>
+      {weeks.map((days) => {
+        const pubMonday = days[0];
+        const pubIso = iso(pubMonday);
+        const offset = Math.round((pubMonday - thisMonday) / (7 * 86400000));
+        const prod = productionWeek(pubMonday);
+        const steps = weeklyTasks(pubMonday);
+        const tag =
+          offset === 0 ? "semana atual" : offset === 1 ? "próxima semana" : offset === 2 ? "em produção agora" : offset > 2 ? "planejamento" : "passada";
+        const weekEntries = days.flatMap((d) => byDay[iso(d)] || []);
+        const pending = weekEntries.filter((e) => e.theme && !(e.card_id && cards[e.card_id])).length;
+
+        return (
+          <section key={pubIso} className={"week-block" + (offset === 2 ? " producing" : "")}>
+            <div className="week-block-head">
+              <div>
+                <h3>
+                  Semana {rangeLabel(pubIso, iso(days[6]))} <span className="week-tag">{tag}</span>
+                </h3>
+                {isStaff && <div className="week-prod">produção em {rangeLabel(prod.start, prod.end)}</div>}
               </div>
-              <SpecialDates list={special[key] || []} />
-              {list.map((entry) => {
-                const card = entry.card_id && cards[entry.card_id];
-                return (
-                  <div key={entry.id} className="week-entry">
-                    <EntryChip entry={entry} onClick={() => setEditing({ entry })} />
-                    {card ? (
-                      <span className="week-status" style={{ borderColor: (COLUMNS[COL_INDEX[card.column_id]] || {}).color }}>
-                        Na produção · {(COLUMNS[COL_INDEX[card.column_id]] || { name: "Em estruturação" }).name}
+              {isStaff && (
+                <div className="week-deadlines">
+                  {steps.map((t) => {
+                    const st = taskStatus(t, tasks.isDone(client.id, t), todayIso);
+                    return (
+                      <span key={t.kind} className={"chip st-" + st.id} title={t.label}>
+                        {STEP_SHORT[t.kind]} {shortDate(t.due)} · {st.id === "feito" ? "✓" : st.label}
                       </span>
-                    ) : (
-                      <button className="btn btn-plain week-send" disabled={!entry.theme} onClick={() => toProduction(entry).then((ok) => ok && showToast("Peça criada em “Em estruturação”."))}>
-                        Criar peça →
-                      </button>
-                    )}
+                    );
+                  })}
+                  <button className="btn btn-gold week-send-all" disabled={busy || pending === 0} onClick={() => sendWeek(days)}>
+                    {pending ? `Criar ${pending} peça(s)` : "Tudo na produção"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="week-days">
+              {days.map((d) => {
+                const key = iso(d);
+                const list = byDay[key] || [];
+                return (
+                  <div key={key} className={"week-day" + (key === todayIso ? " is-today" : "")}>
+                    <div className="week-day-head">
+                      <span className="cal-daynum">{d.getDate()}</span>
+                      <strong>{WEEKDAYS[d.getDay()]}</strong>
+                      {isStaff && (
+                        <button className="cal-add visible" title="Adicionar tema" onClick={() => setEditing({ day: key })}>
+                          +
+                        </button>
+                      )}
+                    </div>
+                    <SpecialDates list={special[isoDate(d)] || []} />
+                    {list.length === 0 && <div className="week-empty">—</div>}
+                    {list.map((entry) => {
+                      const card = entry.card_id && cards[entry.card_id];
+                      return (
+                        <div key={entry.id} className="week-entry">
+                          <EntryChip entry={entry} onClick={isStaff ? () => setEditing({ entry }) : null} />
+                          {isStaff &&
+                            (card ? (
+                              <span className="week-status" style={{ borderColor: (COLUMNS[COL_INDEX[card.column_id]] || {}).color }}>
+                                {(COLUMNS[COL_INDEX[card.column_id]] || { name: "Em estruturação" }).name}
+                              </span>
+                            ) : (
+                              <button
+                                className="btn btn-plain week-send"
+                                disabled={!entry.theme}
+                                onClick={() => toProduction(entry).then((ok) => ok && showToast("Peça criada em “Em estruturação”."))}
+                              >
+                                Criar peça →
+                              </button>
+                            ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
             </div>
-          );
-        })}
-      </div>
+          </section>
+        );
+      })}
 
       {editing && (
         <EntryEditor

@@ -6,6 +6,9 @@ import Board from "./Board";
 import ClientCalendar from "./ClientCalendar";
 import UsersAdmin, { ROLE_LABELS } from "./UsersAdmin";
 import WeekContent from "./WeekContent";
+import ClientChecklist from "./ClientChecklist";
+import DeadlinesOverview, { LeadTimeBanner } from "./DeadlinesOverview";
+import Notifications from "./Notifications";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -35,6 +38,7 @@ const SECTIONS = {
     { id: "producao", title: "Linha de produção", icon: "▦", text: "Todas as peças, da estruturação à publicação." }
   ],
   cliente: [
+    { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os posts planejados para esta semana." },
     { id: "calendario", title: "Calendário mensal", icon: "🗓️", text: "Veja os temas planejados para o mês." },
     { id: "producao", title: "Aprovações", icon: "✅", text: "Aprove, reprove e deixe observações nos conteúdos." }
   ]
@@ -57,6 +61,7 @@ export default function AppShell({ session, profile }) {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
+  const [team, setTeam] = useState([]); // administradores e funcionários (responsáveis pelos clientes)
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
 
@@ -101,6 +106,27 @@ export default function AppShell({ session, profile }) {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isStaff) return;
+    supabase
+      .from("profiles")
+      .select("id, email, full_name, role")
+      .in("role", ["admin", "funcionario"])
+      .order("full_name")
+      .then(({ data }) => setTeam(data || []));
+  }, [isStaff]);
+
+  async function setResponsible(clientId, responsibleId) {
+    const { error } = await supabase.from("clients").update({ responsible_id: responsibleId }).eq("id", clientId);
+    if (error) {
+      console.error(error);
+      showToast("Não consegui salvar o responsável.");
+      return;
+    }
+    setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, responsible_id: responsibleId } : c)));
+    showToast("Responsável atualizado.");
+  }
 
   const current = view.page === "cliente" ? clients.find((c) => c.id === view.clientId) || null : null;
 
@@ -196,6 +222,7 @@ export default function AppShell({ session, profile }) {
             <div className="sub">produção de conteúdo &middot; Up! Digital</div>
           </div>
         </div>
+        {isStaff && <Notifications userId={session.user.id} onOpenClient={(id) => openClient(id)} />}
       </header>
 
       <div className="shell-body">
@@ -304,6 +331,9 @@ export default function AppShell({ session, profile }) {
                 </div>
               </div>
               <div className="page-scroll">
+                <LeadTimeBanner />
+                <DeadlinesOverview clients={clients} team={team} onOpenClient={(id) => openClient(id)} showToast={showToast} />
+                <h3 className="section-title">Todos os clientes</h3>
                 <div className="client-grid">
                   {clients.map((c) => (
                     <button key={c.id} className="client-tile" onClick={() => openClient(c.id)}>
@@ -354,11 +384,26 @@ export default function AppShell({ session, profile }) {
                       </button>
                     ))}
                   </div>
+                  {isStaff && (
+                    <ClientChecklist
+                      key={current.id}
+                      client={current}
+                      team={team}
+                      onSetResponsible={(id) => setResponsible(current.id, id)}
+                      showToast={showToast}
+                    />
+                  )}
                 </div>
               )}
 
-              {view.section === "semana" && isStaff && (
-                <WeekContent key={current.id} client={current} showToast={showToast} onOpenProduction={() => openClient(current.id, "producao")} />
+              {view.section === "semana" && (
+                <WeekContent
+                  key={current.id}
+                  client={current}
+                  isStaff={isStaff}
+                  showToast={showToast}
+                  onOpenProduction={() => openClient(current.id, "producao")}
+                />
               )}
 
               {view.section === "calendario" && (

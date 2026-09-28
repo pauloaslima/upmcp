@@ -1,0 +1,88 @@
+/* ---------- prazos: chips de status ---------- */
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim); white-space: nowrap; }
+.chip.st-feito { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, transparent); background: color-mix(in srgb, var(--teal) 10%, transparent); }
+.chip.st-atrasado { color: #fff; background: var(--terracotta); border-color: var(--terracotta); }
+.chip.st-hoje { color: #2A1F06; background: var(--gold); border-color: var(--gold); }
+.chip.st-breve { color: var(--gold-ink); border-color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, transparent); }
+.pill { font-size: 11.5px; font-weight: 800; padding: 3px 10px; border-radius: 20px; }
+.pill-late { background: var(--terracotta); color: #fff; }
+.pill-ok { background: color-mix(in srgb, var(--teal) 14%, transparent); color: var(--teal); }
+.hint.warn { color: var(--gold-ink); }
+.section-title { font-size: 16px; margin: 22px 0 10px; }
+
+.lead-banner { display: flex; flex-direction: column; gap: 2px; background: var(--ink); color: #F6F5F2; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
+.lead-banner span { color: #C9CFE0; font-size: 12.5px; }
+@media (prefers-color-scheme: dark) { .lead-banner { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); } .lead-banner span { color: var(--text-dim); } }
+
+/* ---------- notificações ---------- */
+.notif { position: relative; margin-left: auto; }
+.notif-btn { position: relative; width: 38px; height: 38px; border-radius: 9px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); font-size: 17px; }
+.notif-btn:hover { background: rgba(255,255,255,.14); }
+.notif-count { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--terracotta); color: #fff; font-size: 10.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+.notif-panel { position: absolute; right: 0; top: 46px; width: min(380px, calc(100vw - 24px)); max-height: 70vh; display: flex; flex-direction: column; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.25); z-index: 60; }
+.notif-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.notif-readall { background: none; border: none; color: var(--gold-ink); font-size: 12px; font-weight: 700; }
+.notif-list { overflow-y: auto; }
+.notif-empty { padding: 20px; text-align: center; color: var(--text-faint); font-size: 13px; }
+.notif-item { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border); padding: 10px 14px; color: var(--text); }
+.notif-item:hover { background: var(--surface-2); }
+.notif-item.unread { background: color-mix(in srgb, var(--gold) 8%, transparent); }
+.notif-item.late .notif-title { color: var(--terracotta); }
+.notif-title { font-size: 13px; font-weight: 700; }
+.notif-body { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+.notif-date { font-size: 11px; color: var(--text-faint); }
+
+/* ---------- checklist do cliente ---------- */
+.checklist-panel { margin-top: 24px; max-width: 900px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); }
+.checklist-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.checklist-head h3 { font-size: 18px; }
+.responsible { display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+.responsible span { font-weight: 700; color: var(--text-dim); }
+.responsible select { width: auto; min-width: 180px; }
+.checklist-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 10px; }
+.checklist-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-2); }
+.checklist-group-title { font-size: 13px; font-weight: 800; color: var(--ink-2); margin-bottom: 6px; display: flex; flex-direction: column; }
+.checklist-group-title span { font-size: 11.5px; font-weight: 600; color: var(--text-faint); }
+.task { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "box label due" "box status status"; column-gap: 8px; row-gap: 1px; align-items: center; margin: 0; padding: 7px 6px; border-radius: 7px; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; border-left: 3px solid transparent; }
+.task:hover { background: var(--surface); }
+.task input { grid-area: box; width: 16px; height: 16px; accent-color: var(--teal); }
+.task-label { grid-area: label; }
+.task-due { grid-area: due; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); }
+.task-status { grid-area: status; font-size: 11px; font-weight: 700; color: var(--text-faint); }
+.task.st-feito .task-label { color: var(--text-faint); text-decoration: line-through; }
+.task.st-feito .task-status { color: var(--teal); }
+.task.st-atrasado { border-left-color: var(--terracotta); }
+.task.st-atrasado .task-status { color: var(--terracotta); }
+.task.st-hoje { border-left-color: var(--gold); }
+.task.st-hoje .task-status, .task.st-breve .task-status { color: var(--gold-ink); }
+
+/* ---------- painel de prazos (Início) ---------- */
+.overview { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); }
+.overview-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.overview-head h3 { font-size: 18px; }
+.overview-scroll { overflow-x: auto; }
+.overview-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
+.overview-table th { text-align: left; font-size: 11.5px; font-weight: 800; color: var(--text-dim); padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: bottom; }
+.overview-table th small { display: block; font-weight: 600; color: var(--text-faint); }
+.overview-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.overview-table tbody tr { cursor: pointer; }
+.overview-table tbody tr:hover { background: var(--surface-2); }
+.ov-client { font-weight: 700; }
+.ov-resp { color: var(--text-dim); }
+.overview .hint { margin-top: 8px; }
+
+/* ---------- conteúdo da semana em blocos ---------- */
+.week-block { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.week-block.producing { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.week-block-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.week-block-head h3 { font-size: 16px; }
+.week-tag { font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--gold-ink); margin-left: 6px; }
+.week-prod { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.week-deadlines { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.week-send-all { padding: 6px 12px; font-size: 12px; }
+.week-block .week-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: 0; }
+.week-block .week-day { padding: 8px; background: var(--surface-2); }
+.week-empty { color: var(--text-faint); font-size: 12px; }
+.card-deadlines { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--text-dim); margin-top: -8px; }
+@media (max-width: 1100px) { .week-block .week-days { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
+@media (max-width: 760px) { .week-block .week-days { grid-template-columns: 1fr; } }

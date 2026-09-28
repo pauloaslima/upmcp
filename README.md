@@ -27,7 +27,8 @@ Nenhuma das duas guarda seu cartão de crédito no plano gratuito.
      logado acessa) e o espaço de arquivos.
    - Depois, faça o mesmo com `supabase/002_calendario.sql` (cria os
      clientes e o calendário de temas de cada um) e com
-     `supabase/003_permissoes.sql` (usuários, papéis e permissões).
+     `supabase/003_permissoes.sql` (usuários, papéis e permissões) e
+     `supabase/004_prazos.sql` (checklist de prazos e notificações).
 6. Vá em **Storage** no menu lateral e confirme que o bucket **anexos** foi
    criado (o script do passo 5 já cria; se não aparecer, crie manualmente com
    esse nome exato, marcado como **privado**).
@@ -88,6 +89,10 @@ quer o contrário: só entra quem você convidar.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → a anon public key (ou a publishable key)
    - `SUPABASE_SECRET_KEY` → a secret key (fica só no servidor; é o que permite
      ao administrador convidar e remover usuários pela tela "Usuários e permissões")
+   - `CRON_SECRET` → uma senha longa qualquer, inventada por você. Protege a
+     checagem diária de prazos (roda todo dia às 08:00, configurada no `vercel.json`)
+   - Opcional, para os lembretes também chegarem por e-mail (via resend.com):
+     `RESEND_API_KEY` e `EMAIL_FROM` (ex.: `Up! Fluxo <avisos@seudominio.com.br>`)
 4. Clique em **Deploy**. Em 1–2 minutos o Vercel te dá um link
    (`algo.vercel.app`) já no ar.
 5. (Opcional) Em **Settings** → **Domains**, você pode apontar um domínio

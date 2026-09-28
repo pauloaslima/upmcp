@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
+import { cardDeadline, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/deadlines";
 
 function fmtDate(iso) {
   if (!iso) return "";
@@ -268,6 +269,7 @@ function CardTile({ card, isStaff, onOpen, dragCardId }) {
   const prog = checklistProgress(card);
   const pct = prog.total ? Math.round((100 * prog.done) / prog.total) : 0;
   const barColor = (COLUMNS[COL_INDEX[card.column_id]] || {}).color || "var(--border)";
+  const deadline = isStaff ? cardDeadline(card, iso(new Date())) : null;
 
   return (
     <button
@@ -287,6 +289,11 @@ function CardTile({ card, isStaff, onOpen, dragCardId }) {
       <div className="card-tags">
         {card.format && <span className="tag tag-format">{card.format}</span>}
         {isStaff && card.sensitive && <span className="tag tag-sensitive">sensível</span>}
+        {deadline && (
+          <span className={"chip st-" + deadline.status.id} title={deadline.label}>
+            {deadline.short} {shortDate(deadline.due)}
+          </span>
+        )}
       </div>
       <div className="card-foot">
         <span className="card-date">{card.publish_date ? fmtDate(card.publish_date) : "—"}</span>
@@ -655,6 +662,16 @@ function CardModal({ card, onClose, onSave, onDelete, showToast }) {
               />
             </div>
           </div>
+          {local.publish_date && (
+            <div className="card-deadlines">
+              <span>Prazos desta peça (2 semanas antes da publicação):</span>
+              {weeklyTasks(mondayOf(parse(local.publish_date))).map((t) => (
+                <span key={t.kind} className="chip st-futuro">
+                  {t.label} · {shortDate(t.due)}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div>
             <label>Canais</label>
