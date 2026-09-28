@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import {
-  COLUMNS,
-  COL_INDEX,
-  FORMATS,
-  defaultCard
-} from "../lib/pipeline";
+import { CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
 
 function fmtDate(iso) {
   if (!iso) return "";
@@ -23,108 +18,95 @@ function checklistProgress(card) {
   return { done, total: list.length };
 }
 
-// client: nome do cliente quando o quadro é aberto dentro de um cliente (filtro fixo);
-// null quando é o quadro geral de produção.
-export default function Board({ client, clientNames }) {
+// Abre um anexo. Arquivos enviados ganham um link temporário na hora do clique,
+// assim o link nunca expira dentro do card.
+async function openAttachment(att, showToast) {
+  if (att.type !== "upload") {
+    window.open(att.url, "_blank", "noopener");
+    return;
+  }
+  const win = window.open("", "_blank");
+  const { data, error } = await supabase.storage.from("anexos").createSignedUrl(att.path, 60 * 60);
+  if (error || !data?.signedUrl) {
+    win?.close();
+    showToast("Não consegui abrir o arquivo.");
+    return;
+  }
+  if (win) win.location.href = data.signedUrl;
+  else window.location.href = data.signedUrl;
+}
+
+// Linha de produção de um cliente.
+// Equipe (admin/funcionário): todas as colunas, arrastar, criar e editar.
+// Cliente: só "Em aprovação", "Aprovados" e "Reprovados"; aprova, reprova e comenta.
+export default function Board({ client, isStaff, showToast }) {
   const [cards, setCards] = useState({}); // id -> card
   const [search, setSearch] = useState("");
-  const [pickedClient, setPickedClient] = useState("");
-  const clientFilter = client || pickedClient;
-  const [openId, setOpenId] = useState(null); // card being edited, or "__new__:<column>"
-  const [toast, setToast] = useState("");
-  const toastTimer = useRef(null);
+  const [openId, setOpenId] = useState(null);
   const dragCardId = useRef(null);
 
-  function showToast(msg) {
-    setToast(msg);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 2600);
-  }
+  const columns = isStaff ? COLUMNS : CLIENT_COLUMNS;
 
-  // initial load + realtime subscription
   useEffect(() => {
     let alive = true;
 
     async function load() {
-      const { data, error } = await supabase.from("cards").select("*");
+      const { data, error } = await supabase.from("cards").select("*").eq("client_id", client.id);
       if (!alive) return;
       if (error) {
         console.error(error);
-        showToast("Não consegui carregar o quadro agora.");
+        showToast("Não consegui carregar a linha de produção.");
         return;
       }
       const map = {};
-      (data || []).forEach((row) => {
-        map[row.id] = row;
-      });
+      (data || []).forEach((row) => (map[row.id] = row));
       setCards(map);
     }
     load();
 
     const channel = supabase
-      .channel("cards-changes")
+      .channel("cards-" + client.id)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "cards" },
+        { event: "*", schema: "public", table: "cards", filter: "client_id=eq." + client.id },
         (payload) => {
           setCards((prev) => {
             const next = { ...prev };
-            if (payload.eventType === "DELETE") {
-              delete next[payload.old.id];
-            } else {
-              next[payload.new.id] = payload.new;
-            }
+            if (payload.eventType === "DELETE") delete next[payload.old.id];
+            else next[payload.new.id] = payload.new;
             return next;
           });
         }
       )
       .subscribe();
 
+    // o cliente deixa de receber avisos de peças que saem da aprovação; recarrega ao voltar para a aba
+    window.addEventListener("focus", load);
+
     return () => {
       alive = false;
+      window.removeEventListener("focus", load);
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  const clientOptions = useMemo(() => {
-    const set = new Set(clientNames);
-    Object.values(cards).forEach((c) => c.client && set.add(c.client));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [cards, clientNames]);
-
-  function matchesFilters(card) {
-    if (clientFilter && card.client !== clientFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const hay = [card.title, card.client, card.objective, card.pillar, card.copy]
-        .join(" ")
-        .toLowerCase();
-      if (hay.indexOf(q) === -1) return false;
-    }
-    return true;
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id]);
 
   const columnCards = useMemo(() => {
     const map = {};
-    COLUMNS.forEach((c) => (map[c.id] = []));
+    columns.forEach((c) => (map[c.id] = []));
+    const q = search.toLowerCase();
     Object.values(cards)
-      .filter(matchesFilters)
-      .sort((a, b) => (a.updated_at || "").localeCompare(b.updated_at || ""))
+      .filter((card) => !q || [card.title, card.objective, card.pillar, card.copy].join(" ").toLowerCase().includes(q))
+      .sort((a, b) => (a.publish_date || "9999").localeCompare(b.publish_date || "9999"))
       .forEach((card) => {
-        const col = map[card.column_id] ? card.column_id : "estruturacao";
-        map[col].push(card);
+        const col = map[card.column_id] ? card.column_id : isStaff ? "estruturacao" : null;
+        if (col) map[col].push(card);
       });
     return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards, search, clientFilter]);
+  }, [cards, search, columns, isStaff]);
 
   async function saveCard(id, patch) {
-    const { data, error } = await supabase
-      .from("cards")
-      .update(patch)
-      .eq("id", id)
-      .select()
-      .single();
+    const { data, error } = await supabase.from("cards").update(patch).eq("id", id).select().single();
     if (error) {
       console.error(error);
       showToast("Não consegui salvar. Tente de novo.");
@@ -133,8 +115,8 @@ export default function Board({ client, clientNames }) {
     setCards((prev) => ({ ...prev, [id]: data }));
   }
 
-  async function createCard(columnId, extra) {
-    const payload = { ...defaultCard(columnId), ...(extra || {}) };
+  async function createCard(columnId) {
+    const payload = { ...defaultCard(columnId), client: client.name, client_id: client.id };
     const { data, error } = await supabase.from("cards").insert(payload).select().single();
     if (error) {
       console.error(error);
@@ -146,6 +128,7 @@ export default function Board({ client, clientNames }) {
   }
 
   async function deleteCard(id) {
+    if (!confirm("Excluir esta peça?")) return;
     const { error } = await supabase.from("cards").delete().eq("id", id);
     if (error) {
       console.error(error);
@@ -157,6 +140,7 @@ export default function Board({ client, clientNames }) {
       delete next[id];
       return next;
     });
+    setOpenId(null);
   }
 
   async function moveCard(id, newColumn) {
@@ -166,9 +150,20 @@ export default function Board({ client, clientNames }) {
     showToast("Movido para “" + (COLUMNS[COL_INDEX[newColumn]] || {}).name + "”.");
   }
 
-  async function handleNewCard(columnId) {
-    const card = await createCard(columnId, client ? { client } : undefined);
-    if (card) setOpenId(card.id);
+  async function review(cardId, decision, comment) {
+    const { error } = await supabase.rpc("client_review", {
+      p_card: cardId,
+      p_decision: decision,
+      p_comment: comment || ""
+    });
+    if (error) {
+      console.error(error);
+      showToast(error.message.includes("motivo") ? "Escreva o motivo da reprovação." : "Não consegui registrar.");
+      return false;
+    }
+    setCards((prev) => ({ ...prev, [cardId]: { ...prev[cardId], column_id: decision } }));
+    showToast(decision === "aprovados" ? "Conteúdo aprovado. Obrigado!" : "Reprovação enviada para a equipe.");
+    return true;
   }
 
   const openCard = openId ? cards[openId] : null;
@@ -176,36 +171,33 @@ export default function Board({ client, clientNames }) {
   return (
     <div className="board-page">
       <div className="toolbar">
-        <input
-          type="search"
-          placeholder="Buscar peça…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {!client && (
-          <select value={pickedClient} onChange={(e) => setPickedClient(e.target.value)}>
-            <option value="">Todos os clientes</option>
-            {clientOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+        <input type="search" placeholder="Buscar peça…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        {isStaff && (
+          <button
+            className="btn btn-gold"
+            onClick={async () => {
+              const card = await createCard("estruturacao");
+              if (card) setOpenId(card.id);
+            }}
+          >
+            + Nova peça
+          </button>
         )}
-        <button className="btn btn-gold" onClick={() => handleNewCard("estruturacao")}>
-          + Nova peça
-        </button>
       </div>
 
       <div className="board-wrap">
-        <div className="board">
-          {COLUMNS.map((col) => (
+        <div className={"board" + (isStaff ? "" : " board-client")}>
+          {columns.map((col) => (
             <ColumnView
               key={col.id}
               col={col}
               cards={columnCards[col.id] || []}
+              isStaff={isStaff}
               onOpen={(id) => setOpenId(id)}
-              onAdd={() => handleNewCard(col.id)}
+              onAdd={async () => {
+                const card = await createCard(col.id);
+                if (card) setOpenId(card.id);
+              }}
               onDrop={(id) => moveCard(id, col.id)}
               dragCardId={dragCardId}
             />
@@ -213,70 +205,75 @@ export default function Board({ client, clientNames }) {
         </div>
       </div>
 
-      {openCard && (
-        <CardModal
-          card={openCard}
-          onClose={() => setOpenId(null)}
-          onSave={(patch) => saveCard(openCard.id, patch)}
-          onDelete={() => {
-            deleteCard(openCard.id);
-            setOpenId(null);
-          }}
-          showToast={showToast}
-          clientNames={clientOptions}
-        />
-      )}
-
-      <div className={"toast" + (toast ? " show" : "")}>{toast}</div>
+      {openCard &&
+        (isStaff ? (
+          <CardModal
+            card={openCard}
+            onClose={() => setOpenId(null)}
+            onSave={(patch) => saveCard(openCard.id, patch)}
+            onDelete={() => deleteCard(openCard.id)}
+            showToast={showToast}
+          />
+        ) : (
+          <ReviewModal
+            card={openCard}
+            onClose={() => setOpenId(null)}
+            onReview={(decision, comment) => review(openCard.id, decision, comment)}
+            showToast={showToast}
+          />
+        ))}
     </div>
   );
 }
 
-function ColumnView({ col, cards, onOpen, onAdd, onDrop, dragCardId }) {
+function ColumnView({ col, cards, isStaff, onOpen, onAdd, onDrop, dragCardId }) {
   const [hover, setHover] = useState(false);
+  const dropProps = isStaff
+    ? {
+        onDragOver: (e) => {
+          e.preventDefault();
+          setHover(true);
+        },
+        onDragLeave: () => setHover(false),
+        onDrop: (e) => {
+          e.preventDefault();
+          setHover(false);
+          if (dragCardId.current) onDrop(dragCardId.current);
+        }
+      }
+    : {};
   return (
-    <div
-      className={"column" + (hover ? " drop-hover" : "")}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setHover(true);
-      }}
-      onDragLeave={() => setHover(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setHover(false);
-        if (dragCardId.current) onDrop(dragCardId.current);
-      }}
-    >
+    <div className={"column" + (hover ? " drop-hover" : "")} {...dropProps}>
       <div className="col-head">
         <span className="col-bar" style={{ background: col.color }}></span>
         <h3>{col.name}</h3>
         <span className="col-count">{cards.length}</span>
       </div>
       <div className="col-cards">
-        {cards.length === 0 && <div className="empty-col">Sem peças aqui.</div>}
+        {cards.length === 0 && <div className="empty-col">Nada aqui.</div>}
         {cards.map((card) => (
-          <CardTile key={card.id} card={card} onOpen={onOpen} dragCardId={dragCardId} />
+          <CardTile key={card.id} card={card} isStaff={isStaff} onOpen={onOpen} dragCardId={dragCardId} />
         ))}
       </div>
-      <button className="col-add" onClick={onAdd}>
-        + adicionar peça
-      </button>
+      {isStaff && (
+        <button className="col-add" onClick={onAdd}>
+          + adicionar peça
+        </button>
+      )}
     </div>
   );
 }
 
-function CardTile({ card, onOpen, dragCardId }) {
+function CardTile({ card, isStaff, onOpen, dragCardId }) {
   const prog = checklistProgress(card);
   const pct = prog.total ? Math.round((100 * prog.done) / prog.total) : 0;
-  const shortId = card.id.slice(-5).toUpperCase();
   const barColor = (COLUMNS[COL_INDEX[card.column_id]] || {}).color || "var(--border)";
 
   return (
     <button
       className="card"
-      style={{ borderLeftColor: barColor }}
-      draggable
+      style={{ borderLeftColor: barColor, cursor: isStaff ? "grab" : "pointer" }}
+      draggable={isStaff}
       onDragStart={(e) => {
         dragCardId.current = card.id;
         e.dataTransfer.effectAllowed = "move";
@@ -285,21 +282,22 @@ function CardTile({ card, onOpen, dragCardId }) {
     >
       <div className="card-top">
         <div className="card-title">{card.title || "Sem título"}</div>
-        <div className="card-id mono">#{shortId}</div>
+        {isStaff && <div className="card-id mono">#{card.id.slice(-5).toUpperCase()}</div>}
       </div>
-      {card.client && <div className="card-client">{card.client}</div>}
       <div className="card-tags">
         {card.format && <span className="tag tag-format">{card.format}</span>}
-        {card.sensitive && <span className="tag tag-sensitive">sensível</span>}
+        {isStaff && card.sensitive && <span className="tag tag-sensitive">sensível</span>}
       </div>
       <div className="card-foot">
         <span className="card-date">{card.publish_date ? fmtDate(card.publish_date) : "—"}</span>
-        <span className="card-progress">
-          <span className="progress-bar">
-            <span className="progress-fill" style={{ width: pct + "%" }}></span>
+        {isStaff && (
+          <span className="card-progress">
+            <span className="progress-bar">
+              <span className="progress-fill" style={{ width: pct + "%" }}></span>
+            </span>
+            {prog.done}/{prog.total}
           </span>
-          {prog.done}/{prog.total}
-        </span>
+        )}
       </div>
       {card.attachments && card.attachments.length > 0 && (
         <div className="card-files">📎 {card.attachments.length} arquivo(s)</div>
@@ -308,7 +306,216 @@ function CardTile({ card, onOpen, dragCardId }) {
   );
 }
 
-function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) {
+function AttachmentList({ attachments, onRemove, showToast }) {
+  if (!attachments || attachments.length === 0) return <div className="hint">Nenhum arquivo anexado ainda.</div>;
+  return (
+    <div className="attach-list">
+      {attachments.map((att, idx) => (
+        <div className="attach-item" key={idx}>
+          <span>{att.type === "upload" ? "🗂️" : "🔗"}</span>
+          <a
+            href={att.type === "upload" ? "#" : att.url}
+            onClick={(e) => {
+              e.preventDefault();
+              openAttachment(att, showToast);
+            }}
+          >
+            {att.name || att.url}
+          </a>
+          {onRemove && (
+            <button className="attach-remove" title="Remover" onClick={() => onRemove(idx)}>
+              ✕
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Observações da peça: equipe e cliente conversam aqui
+function CardComments({ cardId, showToast }) {
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [me, setMe] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getUser().then(({ data }) => alive && setMe(data.user?.id || null));
+    supabase
+      .from("card_comments")
+      .select("*")
+      .eq("card_id", cardId)
+      .order("created_at")
+      .then(({ data }) => alive && setComments(data || []));
+
+    const channel = supabase
+      .channel("comments-" + cardId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "card_comments", filter: "card_id=eq." + cardId }, (p) =>
+        setComments((prev) => {
+          const id = p.old?.id || p.new?.id;
+          const rest = prev.filter((c) => c.id !== id);
+          return p.eventType === "DELETE" ? rest : [...rest, p.new].sort((a, b) => a.created_at.localeCompare(b.created_at));
+        })
+      )
+      .subscribe();
+    return () => {
+      alive = false;
+      supabase.removeChannel(channel);
+    };
+  }, [cardId]);
+
+  async function send() {
+    const body = text.trim();
+    if (!body) return;
+    setSending(true);
+    const { data, error } = await supabase.from("card_comments").insert({ card_id: cardId, body }).select().single();
+    setSending(false);
+    if (error) {
+      console.error(error);
+      showToast("Não consegui salvar a observação.");
+      return;
+    }
+    setComments((prev) => [...prev.filter((c) => c.id !== data.id), data]);
+    setText("");
+  }
+
+  async function remove(id) {
+    if (!confirm("Apagar esta observação?")) return;
+    const { error } = await supabase.from("card_comments").delete().eq("id", id);
+    if (error) {
+      showToast("Não consegui apagar.");
+      return;
+    }
+    setComments((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  return (
+    <div>
+      <div className="section-label" style={{ marginBottom: 8 }}>
+        Observações
+      </div>
+      <div className="comments">
+        {comments.length === 0 && <div className="hint">Nenhuma observação ainda.</div>}
+        {comments.map((c) => (
+          <div key={c.id} className={"comment" + (c.author_role === "cliente" ? " from-client" : "")}>
+            <div className="comment-head">
+              <strong>{c.author_name || "—"}</strong>
+              <span className="comment-role">{c.author_role === "cliente" ? "cliente" : "equipe Up!"}</span>
+              <span className="comment-date">{new Date(c.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
+              {c.author_id === me && (
+                <button className="attach-remove" title="Apagar" onClick={() => remove(c.id)}>
+                  ✕
+                </button>
+              )}
+            </div>
+            <div className="comment-body">{c.body}</div>
+          </div>
+        ))}
+      </div>
+      <div className="comment-new">
+        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Escreva uma observação…" rows={2} />
+        <button className="btn btn-plain" disabled={sending || !text.trim()} onClick={send}>
+          {sending ? "Enviando…" : "Adicionar observação"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Visão do cliente: conteúdo, arte, observações e decisão
+function ReviewModal({ card, onClose, onReview, showToast }) {
+  const [reason, setReason] = useState("");
+  const [rejecting, setRejecting] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function decide(decision) {
+    setBusy(true);
+    const ok = await onReview(decision, decision === "reprovados" ? reason : "");
+    setBusy(false);
+    if (ok) onClose();
+  }
+
+  const status = (CLIENT_COLUMNS.find((c) => c.id === card.column_id) || {}).name;
+
+  return (
+    <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && onClose()}>
+      <div className="modal">
+        <div className="modal-head">
+          <div style={{ flex: 1 }}>
+            <h3 className="entry-title">{card.title || "Sem título"}</h3>
+            <div className="entry-date">
+              {[card.format, card.publish_date && fmtDate(card.publish_date), status].filter(Boolean).join(" · ")}
+            </div>
+          </div>
+          <button className="icon-btn" title="Fechar" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          {card.copy && (
+            <div>
+              <label>Legenda</label>
+              <div className="read-block">{card.copy}</div>
+            </div>
+          )}
+          {card.script && (
+            <div>
+              <label>Roteiro</label>
+              <div className="read-block">{card.script}</div>
+            </div>
+          )}
+          {card.cta && (
+            <div>
+              <label>Chamada (CTA)</label>
+              <div className="read-block">{card.cta}</div>
+            </div>
+          )}
+          <div>
+            <label>Arte e arquivos</label>
+            <AttachmentList attachments={card.attachments} showToast={showToast} />
+          </div>
+
+          <CardComments cardId={card.id} showToast={showToast} />
+
+          {rejecting ? (
+            <div className="review-box">
+              <label htmlFor="reject-reason">O que precisa mudar?</label>
+              <textarea
+                id="reject-reason"
+                autoFocus
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Explique o ajuste para a equipe"
+              />
+              <div className="review-actions">
+                <button className="btn btn-plain" onClick={() => setRejecting(false)}>
+                  Voltar
+                </button>
+                <button className="btn btn-danger" disabled={busy || !reason.trim()} onClick={() => decide("reprovados")}>
+                  Enviar reprovação
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="review-actions">
+              <button className="btn btn-danger" disabled={busy} onClick={() => setRejecting(true)}>
+                Reprovar
+              </button>
+              <button className="btn btn-approve" disabled={busy || card.column_id === "aprovados"} onClick={() => decide("aprovados")}>
+                {card.column_id === "aprovados" ? "Aprovado ✓" : "Aprovar"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardModal({ card, onClose, onSave, onDelete, showToast }) {
   const [local, setLocal] = useState(card);
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -326,9 +533,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
   }
 
   function toggleCheck(idx) {
-    const next = local.checklist.map((item, i) =>
-      i === idx ? { ...item, done: !item.done } : item
-    );
+    const next = local.checklist.map((item, i) => (i === idx ? { ...item, done: !item.done } : item));
     setLocal((l) => ({ ...l, checklist: next }));
     onSave({ checklist: next });
   }
@@ -340,10 +545,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
       showToast("Link inválido — use um endereço http(s) completo.");
       return;
     }
-    const next = [
-      ...(local.attachments || []),
-      { type: "link", url, name: url.replace(/^https?:\/\//, "").slice(0, 40) }
-    ];
+    const next = [...(local.attachments || []), { type: "link", url, name: url.replace(/^https?:\/\//, "").slice(0, 40) }];
     setLocal((l) => ({ ...l, attachments: next }));
     onSave({ attachments: next });
   }
@@ -358,13 +560,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
       const path = `${card.id}/${Date.now()}-${file.name}`;
       const { error: upErr } = await supabase.storage.from("anexos").upload(path, file);
       if (upErr) throw upErr;
-      const { data: signed } = await supabase.storage
-        .from("anexos")
-        .createSignedUrl(path, 60 * 60 * 24 * 7); // 7 dias
-      const next = [
-        ...(local.attachments || []),
-        { type: "upload", path, url: signed?.signedUrl || "", name: file.name }
-      ];
+      const next = [...(local.attachments || []), { type: "upload", path, name: file.name }];
       setLocal((l) => ({ ...l, attachments: next }));
       onSave({ attachments: next });
       showToast("Arquivo anexado.");
@@ -389,67 +585,46 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
   const prog = checklistProgress(local);
 
   return (
-    <div
-      className="overlay"
-      onClick={(e) => {
-        if (e.target.classList.contains("overlay")) onClose();
-      }}
-    >
+    <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && onClose()}>
       <div className="modal">
         <div className="modal-head">
-          <input
-            className="title-input"
-            {...field("title")}
-            onBlur={() => commit("title")}
-            placeholder="Nome da peça"
-          />
+          <input className="title-input" {...field("title")} onBlur={() => commit("title")} placeholder="Nome da peça" />
           <button className="icon-btn" title="Excluir peça" onClick={onDelete}>
+            🗑
+          </button>
+          <button className="icon-btn" title="Fechar" onClick={onClose}>
             ✕
           </button>
         </div>
         <div className="modal-body">
-          <div className="col-select-row">
-            <div style={{ flex: 1 }}>
-              <label>Coluna</label>
-              <select
-                value={local.column_id}
-                onChange={(e) => {
-                  setLocal((l) => ({ ...l, column_id: e.target.value }));
-                  onSave({ column_id: e.target.value });
-                }}
-              >
-                {COLUMNS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <label>Cliente</label>
-              <input
-                list="clientsList"
-                type="text"
-                {...field("client")}
-                onBlur={() => commit("client")}
-                placeholder="Nome do cliente"
-              />
-              <datalist id="clientsList">
-                {clientNames.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
-            </div>
+          <div>
+            <label>Etapa</label>
+            <select
+              value={COL_INDEX[local.column_id] !== undefined ? local.column_id : "estruturacao"}
+              onChange={(e) => {
+                setLocal((l) => ({ ...l, column_id: e.target.value }));
+                onSave({ column_id: e.target.value });
+              }}
+            >
+              {COLUMNS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {local.column_id === "aprovacao" && (
+              <div className="hint">O cliente já está vendo esta peça e pode aprovar ou reprovar.</div>
+            )}
           </div>
 
           <div className="field-row">
             <div>
               <label>Objetivo do post</label>
-              <input {...field("objective")} onBlur={() => commit("objective")} placeholder="Ex.: gerar agendamentos" />
+              <input type="text" {...field("objective")} onBlur={() => commit("objective")} placeholder="Ex.: gerar agendamentos" />
             </div>
             <div>
               <label>Pilar / funil</label>
-              <input {...field("pillar")} onBlur={() => commit("pillar")} placeholder="Ex.: topo de funil" />
+              <input type="text" {...field("pillar")} onBlur={() => commit("pillar")} placeholder="Ex.: topo de funil" />
             </div>
           </div>
 
@@ -475,7 +650,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
               <input
                 type="date"
                 value={local.publish_date || ""}
-                onChange={(e) => setLocal((l) => ({ ...l, publish_date: e.target.value }))}
+                onChange={(e) => setLocal((l) => ({ ...l, publish_date: e.target.value || null }))}
                 onBlur={() => commit("publish_date")}
               />
             </div>
@@ -483,7 +658,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
 
           <div>
             <label>Canais</label>
-            <input {...field("channels")} onBlur={() => commit("channels")} placeholder="Instagram, TikTok…" />
+            <input type="text" {...field("channels")} onBlur={() => commit("channels")} placeholder="Instagram, TikTok…" />
           </div>
 
           <div>
@@ -499,11 +674,11 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
           <div className="field-row">
             <div>
               <label>CTA</label>
-              <input {...field("cta")} onBlur={() => commit("cta")} placeholder="Ex.: chama no direct" />
+              <input type="text" {...field("cta")} onBlur={() => commit("cta")} placeholder="Ex.: chama no direct" />
             </div>
             <div>
               <label>Referência visual</label>
-              <input {...field("visual_ref")} onBlur={() => commit("visual_ref")} placeholder="Link ou descrição" />
+              <input type="text" {...field("visual_ref")} onBlur={() => commit("visual_ref")} placeholder="Link ou descrição" />
             </div>
           </div>
 
@@ -521,8 +696,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
                 onSave({ sensitive: e.target.checked });
               }}
             />
-            Peça sensível (institucional, posicionamento, campanha, assunto delicado) — passa pela Joana nas
-            duas checagens
+            Peça sensível (institucional, posicionamento, campanha, assunto delicado) — passa pela Joana nas duas checagens
           </label>
 
           <div>
@@ -543,26 +717,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
             <div className="section-label" style={{ marginBottom: 8 }}>
               Arquivos anexados
             </div>
-            <div className="attach-list">
-              {(!local.attachments || local.attachments.length === 0) && (
-                <div className="hint">Nenhum arquivo anexado ainda.</div>
-              )}
-              {(local.attachments || []).map((att, idx) => (
-                <div className="attach-item" key={idx}>
-                  <span>{att.type === "upload" ? "🗂️" : "🔗"}</span>
-                  {att.url ? (
-                    <a href={att.url} target="_blank" rel="noopener noreferrer">
-                      {att.name || att.url}
-                    </a>
-                  ) : (
-                    <span className="name">{att.name}</span>
-                  )}
-                  <button className="attach-remove" onClick={() => removeAttachment(idx)}>
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
+            <AttachmentList attachments={local.attachments} onRemove={removeAttachment} showToast={showToast} />
             <div className="attach-row" style={{ marginTop: 8 }}>
               <button className="file-btn" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
                 📎 {uploading ? "Enviando…" : "Subir arquivo"}
@@ -572,8 +727,9 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, clientNames }) 
               </button>
               <input type="file" ref={fileInputRef} hidden onChange={handleFile} />
             </div>
-            <div className="hint">Upload disponível para qualquer pessoa logada (equipe e clientes convidados).</div>
           </div>
+
+          <CardComments cardId={card.id} showToast={showToast} />
 
           <div className="modal-footer">
             <span className="footer-note">

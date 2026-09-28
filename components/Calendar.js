@@ -4,11 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MONTH_CAMPAIGNS, isoDate, specialDates } from "../lib/holidays";
 import { CALENDAR_FORMATS, formatStyle } from "../lib/pipeline";
 
-const MONTHS = [
+export const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
-const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+export const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 const WEEKDAYS_SHORT = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
 // Monta as semanas do mês (domingo a sábado); dias de fora do mês viram null
@@ -24,7 +24,40 @@ function monthGrid(year, month) {
 
 // Calendário mensal de temas de um cliente.
 // Só apresenta e edita; quem salva no banco é quem usa o componente (onCreate/onUpdate/onDelete).
-export default function Calendar({ year, month, entries, onPrev, onNext, onToday, onCreate, onUpdate, onDelete }) {
+export function SpecialDates({ list }) {
+  return list.map((s) => (
+    <div key={s.name} className={"cal-special cal-" + s.kind} title={s.name}>
+      {s.name}
+    </div>
+  ));
+}
+
+// Um tema no calendário. Sem onClick, fica só para leitura (visão do cliente).
+export function EntryChip({ entry, onClick }) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag className={"cal-entry" + (onClick ? "" : " readonly")} onClick={onClick || undefined}>
+      {(entry.format || entry.post_time) && (
+        <span className="cal-entry-top">
+          {entry.format && (
+            <span className="cal-format" style={formatStyle(entry.format)}>
+              {entry.format}
+            </span>
+          )}
+          {entry.post_time && <span className="cal-time">{entry.post_time}</span>}
+        </span>
+      )}
+      <span className="cal-theme">{entry.theme || <em>sem tema</em>}</span>
+      {entry.notes && (
+        <span className="cal-note" title={entry.notes}>
+          ✎ {entry.notes}
+        </span>
+      )}
+    </Tag>
+  );
+}
+
+export default function Calendar({ year, month, entries, readOnly, onPrev, onNext, onToday, onCreate, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(null); // { day } para novo, { entry } para existente
   const today = isoDate(new Date());
   const special = specialDates(year);
@@ -86,41 +119,23 @@ export default function Calendar({ year, month, entries, onPrev, onNext, onToday
               className={
                 "cal-cell" + (key === today ? " cal-today-cell" : "") + (isHoliday ? " cal-holiday" : "")
               }
+              style={readOnly ? { cursor: "default" } : undefined}
               onClick={(e) => {
-                if (e.target === e.currentTarget) setEditing({ day: key });
+                if (!readOnly && e.target === e.currentTarget) setEditing({ day: key });
               }}
             >
               <div className="cal-daybar">
                 <span className="cal-daynum">{date.getDate()}</span>
                 <span className="cal-dow">{WEEKDAYS_SHORT[date.getDay()]}</span>
-                <button className="cal-add" title="Adicionar tema" onClick={() => setEditing({ day: key })}>
-                  +
-                </button>
+                {!readOnly && (
+                  <button className="cal-add" title="Adicionar tema" onClick={() => setEditing({ day: key })}>
+                    +
+                  </button>
+                )}
               </div>
-              {specials.map((s) => (
-                <div key={s.name} className={"cal-special cal-" + s.kind} title={s.name}>
-                  {s.name}
-                </div>
-              ))}
+              <SpecialDates list={specials} />
               {list.map((entry) => (
-                <button key={entry.id} className="cal-entry" onClick={() => setEditing({ entry })}>
-                  {(entry.format || entry.post_time) && (
-                    <span className="cal-entry-top">
-                      {entry.format && (
-                        <span className="cal-format" style={formatStyle(entry.format)}>
-                          {entry.format}
-                        </span>
-                      )}
-                      {entry.post_time && <span className="cal-time">{entry.post_time}</span>}
-                    </span>
-                  )}
-                  <span className="cal-theme">{entry.theme || <em>sem tema</em>}</span>
-                  {entry.notes && (
-                    <span className="cal-note" title={entry.notes}>
-                      ✎ {entry.notes}
-                    </span>
-                  )}
-                </button>
+                <EntryChip key={entry.id} entry={entry} onClick={readOnly ? null : () => setEditing({ entry })} />
               ))}
             </div>
           );
@@ -153,7 +168,7 @@ export default function Calendar({ year, month, entries, onPrev, onNext, onToday
   );
 }
 
-function EntryEditor({ day, entry, specials, onClose, onSave, onDelete }) {
+export function EntryEditor({ day, entry, specials, onClose, onSave, onDelete }) {
   const [values, setValues] = useState({
     format: entry?.format || "",
     theme: entry?.theme || "",
@@ -162,13 +177,15 @@ function EntryEditor({ day, entry, specials, onClose, onSave, onDelete }) {
   });
   const [saving, setSaving] = useState(false);
   const themeRef = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
     themeRef.current?.focus();
-    const onKey = (e) => e.key === "Escape" && onClose();
+    const onKey = (e) => e.key === "Escape" && closeRef.current();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   const date = new Date(day + "T00:00:00");
   const title =

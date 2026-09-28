@@ -26,7 +26,8 @@ Nenhuma das duas guarda seu cartão de crédito no plano gratuito.
    - Isso cria a tabela de peças, as regras de segurança (só quem está
      logado acessa) e o espaço de arquivos.
    - Depois, faça o mesmo com `supabase/002_calendario.sql` (cria os
-     clientes e o calendário de temas de cada um).
+     clientes e o calendário de temas de cada um) e com
+     `supabase/003_permissoes.sql` (usuários, papéis e permissões).
 6. Vá em **Storage** no menu lateral e confirme que o bucket **anexos** foi
    criado (o script do passo 5 já cria; se não aparecer, crie manualmente com
    esse nome exato, marcado como **privado**).
@@ -84,7 +85,9 @@ quer o contrário: só entra quem você convidar.
 3. Antes de clicar em Deploy, abra **Environment Variables** e adicione as
    duas variáveis que você copiou do Supabase no Passo 1:
    - `NEXT_PUBLIC_SUPABASE_URL` → a Project URL
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → a anon public key
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → a anon public key (ou a publishable key)
+   - `SUPABASE_SECRET_KEY` → a secret key (fica só no servidor; é o que permite
+     ao administrador convidar e remover usuários pela tela "Usuários e permissões")
 4. Clique em **Deploy**. Em 1–2 minutos o Vercel te dá um link
    (`algo.vercel.app`) já no ar.
 5. (Opcional) Em **Settings** → **Domains**, você pode apontar um domínio

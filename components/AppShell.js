@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Board from "./Board";
 import ClientCalendar from "./ClientCalendar";
+import UsersAdmin, { ROLE_LABELS } from "./UsersAdmin";
+import WeekContent from "./WeekContent";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -21,16 +23,34 @@ function writeStored(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {}
 }
-
 function isNarrow() {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 860px)").matches;
 }
 
-export default function AppShell({ session }) {
+// O que cada tipo de usuário pode abrir dentro de um cliente
+const SECTIONS = {
+  staff: [
+    { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os temas da semana viram peças na linha de produção com um clique." },
+    { id: "calendario", title: "Calendário mensal", icon: "🗓️", text: "Temas do mês, com feriados, datas comemorativas e campanhas." },
+    { id: "producao", title: "Linha de produção", icon: "▦", text: "Todas as peças, da estruturação à publicação." }
+  ],
+  cliente: [
+    { id: "calendario", title: "Calendário mensal", icon: "🗓️", text: "Veja os temas planejados para o mês." },
+    { id: "producao", title: "Aprovações", icon: "✅", text: "Aprove, reprove e deixe observações nos conteúdos." }
+  ]
+};
+
+export default function AppShell({ session, profile }) {
+  const isStaff = profile.role === "admin" || profile.role === "funcionario";
+  const isAdmin = profile.role === "admin";
+  const sections = isStaff ? SECTIONS.staff : SECTIONS.cliente;
+
   const [clients, setClients] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  // view: { clientId: null } = produção geral; { clientId, tab: "calendario" | "producao" }
-  const [view, setView] = useState({ clientId: null, tab: "calendario" });
+  // view: { page: "inicio" } | { page: "usuarios" } | { page: "cliente", clientId, section: "hub" | "semana" | "calendario" | "producao" }
+  const [view, setView] = useState(
+    isStaff ? { page: "inicio" } : { page: "cliente", clientId: profile.client_id, section: "hub" }
+  );
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [filter, setFilter] = useState("");
   const [month, setMonth] = useState(() => {
@@ -43,14 +63,13 @@ export default function AppShell({ session }) {
   function showToast(msg) {
     setToast(msg);
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 2600);
+    toastTimer.current = setTimeout(() => setToast(""), 2800);
   }
 
-  // restaura a última tela aberta e o estado do menu
   useEffect(() => {
-    setView(readStored(VIEW_KEY, { clientId: null, tab: "calendario" }));
+    if (isStaff) setView(readStored(VIEW_KEY, { page: "inicio" }));
     setSidebarOpen(isNarrow() ? false : readStored(SIDEBAR_KEY, true));
-  }, []);
+  }, [isStaff]);
 
   useEffect(() => {
     let alive = true;
@@ -83,20 +102,23 @@ export default function AppShell({ session }) {
     };
   }, []);
 
-  const current = clients.find((c) => c.id === view.clientId) || null;
+  const current = view.page === "cliente" ? clients.find((c) => c.id === view.clientId) || null : null;
 
-  // cliente salvo que foi excluído → volta para a produção geral
+  // tela salva que não existe mais (cliente excluído, ou papel mudou) → volta ao início
   useEffect(() => {
-    if (loaded && view.clientId && !current) go({ clientId: null });
+    if (!loaded) return;
+    if ((view.page === "cliente" && !current) || (view.page === "usuarios" && !isAdmin)) {
+      go(isStaff ? { page: "inicio" } : { page: "cliente", clientId: profile.client_id, section: "hub" });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, current, view.clientId]);
+  }, [loaded, current, view.page, isAdmin]);
 
   function go(next) {
-    const v = { tab: "calendario", ...next };
-    setView(v);
-    writeStored(VIEW_KEY, v);
+    setView(next);
+    if (isStaff) writeStored(VIEW_KEY, next);
     if (isNarrow()) setSidebarOpen(false);
   }
+  const openClient = (clientId, section = "hub") => go({ page: "cliente", clientId, section });
 
   function toggleSidebar() {
     setSidebarOpen((open) => {
@@ -110,8 +132,6 @@ export default function AppShell({ session }) {
     return q ? clients.filter((c) => c.name.toLowerCase().includes(q)) : clients;
   }, [clients, filter]);
 
-  const clientNames = useMemo(() => clients.map((c) => c.name), [clients]);
-
   async function addClient() {
     const name = prompt("Nome do novo cliente:")?.trim();
     if (!name) return;
@@ -121,11 +141,10 @@ export default function AppShell({ session }) {
       return;
     }
     setClients((prev) => [...prev.filter((c) => c.id !== data.id), data].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
-    go({ clientId: data.id, tab: "calendario" });
+    openClient(data.id);
   }
 
   async function renameClient() {
-    if (!current) return;
     const name = prompt("Novo nome do cliente:", current.name)?.trim();
     if (!name || name === current.name) return;
     const { error } = await supabase.from("clients").update({ name }).eq("id", current.id);
@@ -133,17 +152,14 @@ export default function AppShell({ session }) {
       showToast(error.code === "23505" ? "Já existe um cliente com esse nome." : "Não consegui renomear.");
       return;
     }
-    // as peças do quadro guardam o nome do cliente; acompanham a mudança
-    await supabase.from("cards").update({ client: name }).eq("client", current.name);
+    await supabase.from("cards").update({ client: name }).eq("client_id", current.id);
     setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, name } : c)));
     showToast("Cliente renomeado.");
   }
 
   async function deleteClient() {
-    if (!current) return;
     const ok = confirm(
-      `Excluir o cliente "${current.name}"?\n\nTodos os temas do calendário dele serão apagados. ` +
-        "As peças do quadro de produção continuam lá."
+      `Excluir o cliente "${current.name}"?\n\nO calendário dele será apagado, e as peças da linha de produção ficam sem cliente.`
     );
     if (!ok) return;
     const { error } = await supabase.from("clients").delete().eq("id", current.id);
@@ -152,7 +168,7 @@ export default function AppShell({ session }) {
       return;
     }
     setClients((prev) => prev.filter((c) => c.id !== current.id));
-    go({ clientId: null });
+    go({ page: "inicio" });
     showToast("Cliente excluído.");
   }
 
@@ -162,10 +178,8 @@ export default function AppShell({ session }) {
       return { year: d.getFullYear(), month: d.getMonth() + 1 };
     });
   }
-  function thisMonth() {
-    const now = new Date();
-    setMonth({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  }
+
+  const section = current ? sections.find((s) => s.id === view.section) : null;
 
   return (
     <div className={"shell" + (sidebarOpen ? " sidebar-open" : "")}>
@@ -186,54 +200,80 @@ export default function AppShell({ session }) {
 
       <div className="shell-body">
         <aside className="sidebar" aria-label="Menu">
-          <nav className="side-section">
-            <button
-              className={"side-item" + (!view.clientId ? " active" : "")}
-              onClick={() => go({ clientId: null })}
-            >
-              <span className="side-icon">▦</span> Produção geral
-            </button>
-          </nav>
-
-          <div className="side-section side-clients">
-            <div className="side-heading">
-              <span>Clientes</span>
-              <button className="side-add" onClick={addClient} title="Adicionar cliente">
-                + novo
-              </button>
-            </div>
-            {clients.length > 8 && (
-              <input
-                type="search"
-                className="side-filter"
-                placeholder="Buscar cliente…"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              />
-            )}
-            <div className="side-list">
-              {loaded && clients.length === 0 && (
-                <div className="side-empty">
-                  Nenhum cliente ainda. Clique em <strong>+ novo</strong> para cadastrar.
-                </div>
-              )}
-              {visibleClients.map((c) => (
-                <button
-                  key={c.id}
-                  className={"side-item" + (view.clientId === c.id ? " active" : "")}
-                  onClick={() => go({ clientId: c.id, tab: view.tab || "calendario" })}
-                >
-                  <span className="side-initial">{c.name.charAt(0).toUpperCase()}</span>
-                  <span className="side-name">{c.name}</span>
+          {isStaff ? (
+            <>
+              <nav className="side-section">
+                <button className={"side-item" + (view.page === "inicio" ? " active" : "")} onClick={() => go({ page: "inicio" })}>
+                  <span className="side-icon">⌂</span> Início
                 </button>
-              ))}
-            </div>
-          </div>
+                {isAdmin && (
+                  <button className={"side-item" + (view.page === "usuarios" ? " active" : "")} onClick={() => go({ page: "usuarios" })}>
+                    <span className="side-icon">👥</span> Usuários e permissões
+                  </button>
+                )}
+              </nav>
+
+              <div className="side-section side-clients">
+                <div className="side-heading">
+                  <span>Clientes</span>
+                  <button className="side-add" onClick={addClient} title="Adicionar cliente">
+                    + novo
+                  </button>
+                </div>
+                {clients.length > 8 && (
+                  <input type="search" className="side-filter" placeholder="Buscar cliente…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+                )}
+                <div className="side-list">
+                  {loaded && clients.length === 0 && (
+                    <div className="side-empty">
+                      Nenhum cliente ainda. Clique em <strong>+ novo</strong> para cadastrar.
+                    </div>
+                  )}
+                  {visibleClients.map((c) => (
+                    <div key={c.id}>
+                      <button className={"side-item" + (view.clientId === c.id && view.page === "cliente" ? " active" : "")} onClick={() => openClient(c.id)}>
+                        <span className="side-initial">{c.name.charAt(0).toUpperCase()}</span>
+                        <span className="side-name">{c.name}</span>
+                      </button>
+                      {view.page === "cliente" && view.clientId === c.id && (
+                        <div className="side-sub">
+                          {sections.map((s) => (
+                            <button key={s.id} className={"side-subitem" + (view.section === s.id ? " active" : "")} onClick={() => openClient(c.id, s.id)}>
+                              {s.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <nav className="side-section side-clients">
+              {current && (
+                <>
+                  <button className={"side-item" + (view.section === "hub" ? " active" : "")} onClick={() => openClient(current.id)}>
+                    <span className="side-initial">{current.name.charAt(0).toUpperCase()}</span>
+                    <span className="side-name">{current.name}</span>
+                  </button>
+                  <div className="side-sub">
+                    {sections.map((s) => (
+                      <button key={s.id} className={"side-subitem" + (view.section === s.id ? " active" : "")} onClick={() => openClient(current.id, s.id)}>
+                        {s.title}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </nav>
+          )}
 
           <div className="side-footer">
-            <span className="side-user" title={session.user.email}>
-              {session.user.email}
-            </span>
+            <div className="side-user" title={session.user.email}>
+              <span>{profile.full_name || session.user.email}</span>
+              <small>{ROLE_LABELS[profile.role]}</small>
+            </div>
             <button className="side-logout" onClick={() => supabase.auth.signOut()}>
               Sair
             </button>
@@ -242,57 +282,102 @@ export default function AppShell({ session }) {
         <div className="sidebar-scrim" onClick={toggleSidebar}></div>
 
         <main className="main">
-          {current ? (
+          {view.page === "usuarios" && isAdmin && (
             <>
               <div className="page-head">
-                <h2 className="page-title">{current.name}</h2>
-                <div className="tabs" role="tablist">
-                  <button
-                    role="tab"
-                    aria-selected={view.tab !== "producao"}
-                    className={"tab" + (view.tab !== "producao" ? " on" : "")}
-                    onClick={() => go({ clientId: current.id, tab: "calendario" })}
-                  >
-                    Calendário
-                  </button>
-                  <button
-                    role="tab"
-                    aria-selected={view.tab === "producao"}
-                    className={"tab" + (view.tab === "producao" ? " on" : "")}
-                    onClick={() => go({ clientId: current.id, tab: "producao" })}
-                  >
-                    Produção
-                  </button>
-                </div>
+                <h2 className="page-title">Usuários e permissões</h2>
+              </div>
+              <div className="page-scroll">
+                <UsersAdmin me={session.user} clients={clients} showToast={showToast} />
+              </div>
+            </>
+          )}
+
+          {view.page === "inicio" && isStaff && (
+            <>
+              <div className="page-head">
+                <h2 className="page-title">Clientes</h2>
                 <div className="page-actions">
-                  <button className="btn btn-plain" onClick={renameClient}>
-                    Renomear
-                  </button>
-                  <button className="btn btn-plain danger" onClick={deleteClient}>
-                    Excluir
+                  <button className="btn btn-gold" onClick={addClient}>
+                    + Novo cliente
                   </button>
                 </div>
               </div>
-              {view.tab === "producao" ? (
-                <Board key={current.id} client={current.name} clientNames={clientNames} />
-              ) : (
+              <div className="page-scroll">
+                <div className="client-grid">
+                  {clients.map((c) => (
+                    <button key={c.id} className="client-tile" onClick={() => openClient(c.id)}>
+                      <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
+                      <span className="client-tile-name">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {current && (
+            <>
+              <div className="page-head">
+                {view.section !== "hub" && (
+                  <button className="back-btn" onClick={() => openClient(current.id)} aria-label="Voltar para o cliente">
+                    ‹
+                  </button>
+                )}
+                <div className="crumbs">
+                  <h2 className="page-title">{current.name}</h2>
+                  {section && <span className="crumb-sub">{section.title}</span>}
+                </div>
+                {isStaff && view.section === "hub" && (
+                  <div className="page-actions">
+                    <button className="btn btn-plain" onClick={renameClient}>
+                      Renomear
+                    </button>
+                    <button className="btn btn-plain danger" onClick={deleteClient}>
+                      Excluir
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {view.section === "hub" && (
+                <div className="page-scroll">
+                  <p className="hub-lead">{isStaff ? "O que você vai fazer com este cliente?" : "Olá! Escolha o que deseja ver."}</p>
+                  <div className="hub-grid">
+                    {sections.map((s) => (
+                      <button key={s.id} className="hub-tile" onClick={() => openClient(current.id, s.id)}>
+                        <span className="hub-icon" aria-hidden="true">
+                          {s.icon}
+                        </span>
+                        <span className="hub-title">{s.title}</span>
+                        <span className="hub-text">{s.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {view.section === "semana" && isStaff && (
+                <WeekContent key={current.id} client={current} showToast={showToast} onOpenProduction={() => openClient(current.id, "producao")} />
+              )}
+
+              {view.section === "calendario" && (
                 <ClientCalendar
                   client={current}
+                  readOnly={!isStaff}
                   year={month.year}
                   month={month.month}
                   onPrev={() => shiftMonth(-1)}
                   onNext={() => shiftMonth(1)}
-                  onToday={thisMonth}
+                  onToday={() => {
+                    const now = new Date();
+                    setMonth({ year: now.getFullYear(), month: now.getMonth() + 1 });
+                  }}
                   showToast={showToast}
                 />
               )}
-            </>
-          ) : (
-            <>
-              <div className="page-head">
-                <h2 className="page-title">Produção geral</h2>
-              </div>
-              <Board client={null} clientNames={clientNames} />
+
+              {view.section === "producao" && <Board key={current.id} client={current} isStaff={isStaff} showToast={showToast} />}
             </>
           )}
         </main>
