@@ -1,0 +1,14 @@
+import "./globals.css";
+
+export const metadata = {
+  title: "Up! Fluxo",
+  description: "Quadro de produção de conteúdo da Up! Digital"
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="pt-BR">
+      <body>{children}</body>
+    </html>
+  );
+}
