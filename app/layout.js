@@ -3,6 +3,7 @@ import "./shell.css";
 import "./prazos.css";
 import "./login.css";
 import "./tarefas.css";
+import "./atribuicoes.css";
 
 export const metadata = {
   title: "Up! Fluxo",

@@ -13,6 +13,7 @@ import { PasswordForm } from "./Login";
 import TasksPage from "./TasksPage";
 import RoutinesPage from "./RoutinesPage";
 import { ClientIdentity, ClientTeam } from "./ClientTeam";
+import AssignmentsPage from "./AssignmentsPage";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -67,6 +68,8 @@ export default function AppShell({ session, profile }) {
   });
   const [team, setTeam] = useState([]); // administradores e funcionários (responsáveis pelos clientes)
   const [memberOf, setMemberOf] = useState([]); // clientes em que esta pessoa está na equipe
+  const [othersOpen, setOthersOpen] = useState(false); // "Outros clientes" começa fechado
+  const toggleOthers = () => setOthersOpen((o) => !o);
   const [changingPw, setChangingPw] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
@@ -138,7 +141,9 @@ export default function AppShell({ session, profile }) {
       return;
     }
     setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, responsible_id: responsibleId } : c)));
-    showToast("Responsável atualizado.");
+    const who = team.find((p) => p.id === responsibleId);
+    const name = clients.find((c) => c.id === clientId)?.name || "Cliente";
+    showToast(who ? `${name} agora é responsabilidade de ${(who.full_name || who.email).split(" ")[0]}.` : `${name} ficou sem responsável.`);
   }
 
   const current = view.page === "cliente" ? clients.find((c) => c.id === view.clientId) || null : null;
@@ -146,7 +151,11 @@ export default function AppShell({ session, profile }) {
   // tela salva que não existe mais (cliente excluído, ou papel mudou) → volta ao início
   useEffect(() => {
     if (!loaded) return;
-    if ((view.page === "cliente" && !current) || (view.page === "usuarios" && !isAdmin) || (["tarefas", "rotina"].includes(view.page) && !isStaff)) {
+    if (
+      (view.page === "cliente" && !current) ||
+      (["usuarios", "atribuicoes"].includes(view.page) && !isAdmin) ||
+      (["tarefas", "rotina"].includes(view.page) && !isStaff)
+    ) {
       go(isStaff ? { page: "inicio" } : { page: "cliente", clientId: profile.client_id, section: "hub" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,6 +184,12 @@ export default function AppShell({ session, profile }) {
   const isMine = (c) => c.responsible_id === session.user.id || memberOf.includes(c.id);
   const myClients = visibleClients.filter(isMine);
   const otherClients = visibleClients.filter((c) => !isMine(c));
+
+  // abre "Outros clientes" sozinho quando a pessoa busca ou está dentro de um deles
+  const insideOther = !!current && !isMine(current);
+  useEffect(() => {
+    if (filter.trim() || insideOther) setOthersOpen(true);
+  }, [filter, insideOther]);
 
   async function addClient() {
     const name = prompt("Nome do novo cliente:")?.trim();
@@ -258,6 +273,11 @@ export default function AppShell({ session, profile }) {
                   <span className="side-icon">⟳</span> Rotina diária
                 </button>
                 {isAdmin && (
+                  <button className={"side-item" + (view.page === "atribuicoes" ? " active" : "")} onClick={() => go({ page: "atribuicoes" })}>
+                    <span className="side-icon">⇄</span> Atribuições
+                  </button>
+                )}
+                {isAdmin && (
                   <button className={"side-item" + (view.page === "usuarios" ? " active" : "")} onClick={() => go({ page: "usuarios" })}>
                     <span className="side-icon">👥</span> Usuários e permissões
                   </button>
@@ -287,8 +307,14 @@ export default function AppShell({ session, profile }) {
                     (group) =>
                       group.list.length > 0 && (
                         <div key={group.key} className="side-group">
-                          {group.title && <div className="side-group-title">{group.title}</div>}
-                          {group.list.map((c) => (
+                          {group.key === "others" && group.title ? (
+                            <button className="side-group-title side-toggle" onClick={toggleOthers} aria-expanded={othersOpen}>
+                              <span className={"caret" + (othersOpen ? " open" : "")}>▸</span> {group.title} ({group.list.length})
+                            </button>
+                          ) : (
+                            group.title && <div className="side-group-title">{group.title}</div>
+                          )}
+                          {(group.key !== "others" || !group.title || othersOpen) && group.list.map((c) => (
                             <div key={c.id}>
                               <button className={"side-item" + (view.clientId === c.id && view.page === "cliente" ? " active" : "")} onClick={() => openClient(c.id)}>
                                 <span className="side-initial">{c.name.charAt(0).toUpperCase()}</span>
@@ -358,6 +384,17 @@ export default function AppShell({ session, profile }) {
             </>
           )}
 
+          {view.page === "atribuicoes" && isAdmin && (
+            <>
+              <div className="page-head">
+                <h2 className="page-title">Atribuições</h2>
+              </div>
+              <div className="page-scroll">
+                <AssignmentsPage clients={clients} team={team} onSetResponsible={setResponsible} onOpenClient={(id) => openClient(id)} />
+              </div>
+            </>
+          )}
+
           {view.page === "tarefas" && isStaff && (
             <>
               <div className="page-head">
@@ -413,17 +450,25 @@ export default function AppShell({ session, profile }) {
                     showToast={showToast}
                   />
                 </div>
-                <h3 className="section-title">{clients.filter(isMine).length ? "Outros clientes" : "Todos os clientes"}</h3>
-                <div className="client-grid">
-                  {clients
-                    .filter((c) => !isMine(c))
-                    .map((c) => (
-                      <button key={c.id} className="client-tile" onClick={() => openClient(c.id)}>
-                        <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
-                        <span className="client-tile-name">{c.name}</span>
-                      </button>
-                    ))}
-                </div>
+                {clients.filter(isMine).length ? (
+                  <button className="section-title section-toggle" onClick={toggleOthers} aria-expanded={othersOpen}>
+                    <span className={"caret" + (othersOpen ? " open" : "")}>▸</span> Outros clientes ({clients.filter((c) => !isMine(c)).length})
+                  </button>
+                ) : (
+                  <h3 className="section-title">Todos os clientes</h3>
+                )}
+                {(othersOpen || !clients.filter(isMine).length) && (
+                  <div className="client-grid">
+                    {clients
+                      .filter((c) => !isMine(c))
+                      .map((c) => (
+                        <button key={c.id} className="client-tile" onClick={() => openClient(c.id)}>
+                          <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
+                          <span className="client-tile-name">{c.name}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
             </>
           )}
