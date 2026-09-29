@@ -20,6 +20,7 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
   const todayIso = iso(new Date());
   const [who, setWho] = useState(me.id); // id de uma pessoa ou "all" (só admin)
   const [filter, setFilter] = useState("pendentes");
+  const [clientFilter, setClientFilter] = useState("all"); // id de um cliente ou "all"
   const [cards, setCards] = useState([]);
   const tasks = useClientTasks(null, iso(addDays(parse(todayIso), -60)), showToast);
   const people = Object.fromEntries(team.map((p) => [p.id, p]));
@@ -95,8 +96,10 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
         })
       );
     });
-    return list.sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
-  }, [cards, clients, tasks, todayIso, who]);
+    return list
+      .filter((i) => clientFilter === "all" || i.clientId === clientFilter)
+      .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+  }, [cards, clients, tasks, todayIso, who, clientFilter]);
 
   const counts = {
     pendentes: items.filter((i) => !i.done).length,
@@ -129,8 +132,16 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
             </button>
           ))}
         </div>
+        <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className="tasks-who" aria-label="Filtrar por cliente">
+          <option value="all">Todos os clientes</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
         {isAdmin && (
-          <select value={who} onChange={(e) => setWho(e.target.value)} className="tasks-who">
+          <select value={who} onChange={(e) => setWho(e.target.value)} className="tasks-who" aria-label="Filtrar por usuário">
             <option value="all">Todos os funcionários</option>
             {team.map((p) => (
               <option key={p.id} value={p.id}>
