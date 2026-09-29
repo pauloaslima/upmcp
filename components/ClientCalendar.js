@@ -22,6 +22,8 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
       onCreate={create}
       onUpdate={update}
       onDelete={remove}
+      client={client}
+      showToast={showToast}
     />
   );
 }

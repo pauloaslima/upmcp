@@ -10,6 +10,9 @@ import ClientChecklist from "./ClientChecklist";
 import DeadlinesOverview, { LeadTimeBanner } from "./DeadlinesOverview";
 import Notifications from "./Notifications";
 import { PasswordForm } from "./Login";
+import TasksPage from "./TasksPage";
+import RoutinesPage from "./RoutinesPage";
+import { ClientIdentity, ClientTeam } from "./ClientTeam";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -63,6 +66,7 @@ export default function AppShell({ session, profile }) {
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
   const [team, setTeam] = useState([]); // administradores e funcionários (responsáveis pelos clientes)
+  const [memberOf, setMemberOf] = useState([]); // clientes em que esta pessoa está na equipe
   const [changingPw, setChangingPw] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimer = useRef(null);
@@ -117,7 +121,14 @@ export default function AppShell({ session, profile }) {
       .in("role", ["admin", "funcionario"])
       .order("full_name")
       .then(({ data }) => setTeam(data || []));
+    loadMembership();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStaff]);
+
+  async function loadMembership() {
+    const { data } = await supabase.from("client_members").select("client_id").eq("user_id", session.user.id);
+    setMemberOf((data || []).map((m) => m.client_id));
+  }
 
   async function setResponsible(clientId, responsibleId) {
     const { error } = await supabase.from("clients").update({ responsible_id: responsibleId }).eq("id", clientId);
@@ -135,7 +146,7 @@ export default function AppShell({ session, profile }) {
   // tela salva que não existe mais (cliente excluído, ou papel mudou) → volta ao início
   useEffect(() => {
     if (!loaded) return;
-    if ((view.page === "cliente" && !current) || (view.page === "usuarios" && !isAdmin)) {
+    if ((view.page === "cliente" && !current) || (view.page === "usuarios" && !isAdmin) || (["tarefas", "rotina"].includes(view.page) && !isStaff)) {
       go(isStaff ? { page: "inicio" } : { page: "cliente", clientId: profile.client_id, section: "hub" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,6 +170,11 @@ export default function AppShell({ session, profile }) {
     const q = filter.trim().toLowerCase();
     return q ? clients.filter((c) => c.name.toLowerCase().includes(q)) : clients;
   }, [clients, filter]);
+
+  // "Meus clientes": onde a pessoa é responsável ou faz parte da equipe
+  const isMine = (c) => c.responsible_id === session.user.id || memberOf.includes(c.id);
+  const myClients = visibleClients.filter(isMine);
+  const otherClients = visibleClients.filter((c) => !isMine(c));
 
   async function addClient() {
     const name = prompt("Nome do novo cliente:")?.trim();
@@ -235,6 +251,12 @@ export default function AppShell({ session, profile }) {
                 <button className={"side-item" + (view.page === "inicio" ? " active" : "")} onClick={() => go({ page: "inicio" })}>
                   <span className="side-icon">⌂</span> Início
                 </button>
+                <button className={"side-item" + (view.page === "tarefas" ? " active" : "")} onClick={() => go({ page: "tarefas" })}>
+                  <span className="side-icon">☑</span> Tarefas
+                </button>
+                <button className={"side-item" + (view.page === "rotina" ? " active" : "")} onClick={() => go({ page: "rotina" })}>
+                  <span className="side-icon">⟳</span> Rotina diária
+                </button>
                 {isAdmin && (
                   <button className={"side-item" + (view.page === "usuarios" ? " active" : "")} onClick={() => go({ page: "usuarios" })}>
                     <span className="side-icon">👥</span> Usuários e permissões
@@ -258,23 +280,34 @@ export default function AppShell({ session, profile }) {
                       Nenhum cliente ainda. Clique em <strong>+ novo</strong> para cadastrar.
                     </div>
                   )}
-                  {visibleClients.map((c) => (
-                    <div key={c.id}>
-                      <button className={"side-item" + (view.clientId === c.id && view.page === "cliente" ? " active" : "")} onClick={() => openClient(c.id)}>
-                        <span className="side-initial">{c.name.charAt(0).toUpperCase()}</span>
-                        <span className="side-name">{c.name}</span>
-                      </button>
-                      {view.page === "cliente" && view.clientId === c.id && (
-                        <div className="side-sub">
-                          {sections.map((s) => (
-                            <button key={s.id} className={"side-subitem" + (view.section === s.id ? " active" : "")} onClick={() => openClient(c.id, s.id)}>
-                              {s.title}
-                            </button>
+                  {[
+                    { key: "mine", title: "Meus clientes", list: myClients },
+                    { key: "others", title: myClients.length ? "Outros clientes" : null, list: otherClients }
+                  ].map(
+                    (group) =>
+                      group.list.length > 0 && (
+                        <div key={group.key} className="side-group">
+                          {group.title && <div className="side-group-title">{group.title}</div>}
+                          {group.list.map((c) => (
+                            <div key={c.id}>
+                              <button className={"side-item" + (view.clientId === c.id && view.page === "cliente" ? " active" : "")} onClick={() => openClient(c.id)}>
+                                <span className="side-initial">{c.name.charAt(0).toUpperCase()}</span>
+                                <span className="side-name">{c.name}</span>
+                              </button>
+                              {view.page === "cliente" && view.clientId === c.id && (
+                                <div className="side-sub">
+                                  {sections.map((s) => (
+                                    <button key={s.id} className={"side-subitem" + (view.section === s.id ? " active" : "")} onClick={() => openClient(c.id, s.id)}>
+                                      {s.title}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      )
+                  )}
                 </div>
               </div>
             </>
@@ -325,10 +358,32 @@ export default function AppShell({ session, profile }) {
             </>
           )}
 
+          {view.page === "tarefas" && isStaff && (
+            <>
+              <div className="page-head">
+                <h2 className="page-title">Tarefas</h2>
+              </div>
+              <div className="page-scroll">
+                <TasksPage me={session.user} isAdmin={isAdmin} clients={clients} team={team} onOpenClient={openClient} showToast={showToast} />
+              </div>
+            </>
+          )}
+
+          {view.page === "rotina" && isStaff && (
+            <>
+              <div className="page-head">
+                <h2 className="page-title">Rotina diária</h2>
+              </div>
+              <div className="page-scroll">
+                <RoutinesPage me={session.user} isAdmin={isAdmin} clients={clients} team={team} showToast={showToast} />
+              </div>
+            </>
+          )}
+
           {view.page === "inicio" && isStaff && (
             <>
               <div className="page-head">
-                <h2 className="page-title">Clientes</h2>
+                <h2 className="page-title">Início</h2>
                 <div className="page-actions">
                   <button className="btn btn-gold" onClick={addClient}>
                     + Novo cliente
@@ -337,15 +392,37 @@ export default function AppShell({ session, profile }) {
               </div>
               <div className="page-scroll">
                 <LeadTimeBanner />
-                <DeadlinesOverview clients={clients} team={team} onOpenClient={(id) => openClient(id)} showToast={showToast} />
-                <h3 className="section-title">Todos os clientes</h3>
+                {clients.filter(isMine).length > 0 && (
+                  <>
+                    <h3 className="section-title first">Meus clientes</h3>
+                    <div className="client-grid">
+                      {clients.filter(isMine).map((c) => (
+                        <button key={c.id} className="client-tile mine" onClick={() => openClient(c.id)}>
+                          <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
+                          <span className="client-tile-name">{c.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div style={{ marginTop: 18 }}>
+                  <DeadlinesOverview
+                    clients={isAdmin || clients.filter(isMine).length === 0 ? clients : clients.filter(isMine)}
+                    team={team}
+                    onOpenClient={(id) => openClient(id)}
+                    showToast={showToast}
+                  />
+                </div>
+                <h3 className="section-title">{clients.filter(isMine).length ? "Outros clientes" : "Todos os clientes"}</h3>
                 <div className="client-grid">
-                  {clients.map((c) => (
-                    <button key={c.id} className="client-tile" onClick={() => openClient(c.id)}>
-                      <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
-                      <span className="client-tile-name">{c.name}</span>
-                    </button>
-                  ))}
+                  {clients
+                    .filter((c) => !isMine(c))
+                    .map((c) => (
+                      <button key={c.id} className="client-tile" onClick={() => openClient(c.id)}>
+                        <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
+                        <span className="client-tile-name">{c.name}</span>
+                      </button>
+                    ))}
                 </div>
               </div>
             </>
@@ -398,6 +475,17 @@ export default function AppShell({ session, profile }) {
                       showToast={showToast}
                     />
                   )}
+                  {isStaff && (
+                    <div className="hub-panels">
+                      <ClientTeam key={"team-" + current.id} client={current} team={team} isAdmin={isAdmin} showToast={showToast} onMembersChange={loadMembership} />
+                      <ClientIdentity
+                        key={"id-" + current.id}
+                        client={current}
+                        showToast={showToast}
+                        onSaved={(values) => setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, ...values } : c)))}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -427,7 +515,7 @@ export default function AppShell({ session, profile }) {
                 />
               )}
 
-              {view.section === "producao" && <Board key={current.id} client={current} isStaff={isStaff} showToast={showToast} />}
+              {view.section === "producao" && <Board key={current.id} client={current} isStaff={isStaff} team={team} showToast={showToast} />}
             </>
           )}
         </main>

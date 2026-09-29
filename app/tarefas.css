@@ -1,0 +1,84 @@
+/* ---------- responsável (iniciais) ---------- */
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ink-2); color: #fff; font-size: 9.5px; font-weight: 800; margin-right: 6px; vertical-align: middle; letter-spacing: 0; }
+.avatar.empty { background: var(--surface-2); color: var(--text-faint); border: 1px dashed var(--border); }
+@media (prefers-color-scheme: dark) { .avatar { background: var(--gold); color: #2A1F06; } }
+
+/* checklist com responsável por tarefa */
+.task { grid-template-areas: "box label due" "box status status" "box assignee assignee"; cursor: default; }
+.task-assignee { grid-area: assignee; margin-top: 4px; padding: 4px 6px !important; font-size: 11.5px !important; background: var(--surface) !important; }
+
+/* ---------- menu ---------- */
+.side-group + .side-group { margin-top: 10px; }
+.side-group-title { font-size: 10.5px; font-weight: 800; color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; padding: 4px 10px; }
+.section-title.first { margin-top: 0; }
+.client-tile.mine { border-color: color-mix(in srgb, var(--gold) 60%, var(--border)); }
+
+/* ---------- aba Tarefas e Rotina diária ---------- */
+.tasks { max-width: 1000px; }
+.tasks-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.tasks-who { width: auto !important; min-width: 200px; }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; flex-wrap: wrap; }
+.seg-btn { background: none; border: none; border-radius: 7px; padding: 6px 12px; font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
+.seg-btn span { font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: .75; margin-left: 2px; }
+.seg-btn.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.seg-btn.alert:not(.on) { color: var(--terracotta); }
+.empty-state { padding: 34px 16px; text-align: center; color: var(--text-faint); font-size: 14px; background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; }
+.task-list { display: flex; flex-direction: column; gap: 8px; }
+.task-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 0; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; color: var(--text); }
+.task-item.st-atrasado { border-left-color: var(--terracotta); }
+.task-item.st-hoje { border-left-color: var(--gold); }
+.task-item.st-breve { border-left-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+.task-item.st-feito { border-left-color: var(--teal); }
+.task-item.done .task-item-title { color: var(--text-faint); text-decoration: line-through; }
+.task-item-main { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 320px; }
+.task-item-main input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--teal); flex: none; }
+.task-kind { width: 18px; text-align: center; color: var(--text-faint); flex: none; }
+.task-item-text { min-width: 0; }
+.task-item-title { background: none; border: none; padding: 0; text-align: left; font-size: 14px; font-weight: 700; color: var(--text); }
+button.task-item-title:hover { text-decoration: underline; }
+.task-item-title.plain { display: block; }
+.task-item-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.task-item-side { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-item-due { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--text-dim); }
+.task-done-btn { padding: 5px 10px; font-size: 12px; color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, var(--border)); }
+.task-move { width: auto !important; padding: 5px 8px !important; font-size: 12px !important; }
+label.task-item.routine { cursor: pointer; }
+
+.day-nav { display: flex; align-items: center; gap: 8px; }
+.day-nav strong { min-width: 110px; text-align: center; font-size: 14px; }
+.routine-progress { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--text-dim); margin-bottom: 14px; flex-wrap: wrap; }
+.routine-bar { width: 160px; height: 8px; border-radius: 6px; background: var(--border); overflow: hidden; }
+.routine-bar span { display: block; height: 100%; background: var(--teal); transition: width .2s; }
+.routine-group { margin-bottom: 16px; }
+.routine-group h4 { margin: 0 0 8px; font-size: 13px; font-weight: 800; color: var(--ink-2); }
+.routine-manager { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.routine-form, .routine-all { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); }
+.routine-form h3, .routine-all h3 { font-size: 16px; margin-bottom: 10px; }
+.routine-form > label { margin-top: 10px; }
+.routine-form .btn { margin-top: 14px; }
+.pick-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick { display: inline-flex; align-items: center; gap: 5px; margin: 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: none; letter-spacing: 0; cursor: pointer; background: var(--surface-2); }
+.pick input { width: 13px; height: 13px; accent-color: var(--gold); }
+.pick.on { border-color: var(--gold); color: var(--text); background: color-mix(in srgb, var(--gold) 12%, var(--surface)); }
+.routine-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.routine-row span { flex: 1; min-width: 0; }
+.routine-row small { color: var(--text-faint); }
+.routine-row.inactive span { color: var(--text-faint); text-decoration: line-through; }
+.routine-row .btn { padding: 4px 9px; font-size: 11.5px; }
+
+/* ---------- equipe e identidade do cliente ---------- */
+.hub-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 0 18px; max-width: 900px; }
+.hub-panels .checklist-panel { max-width: none; }
+.team-cols { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 6px; }
+.member-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.member-fns { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.member-add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.member-add select, .member-add input { flex: 1 1 150px; width: auto; }
+
+/* ---------- tema: fotos, referências, identidade ---------- */
+.ref-add { display: flex; gap: 6px; margin-top: 6px; }
+.ref-add input { flex: 1; }
+.identity-toggle { margin-bottom: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.identity-preview { font-size: 12.5px; color: var(--text-dim); background: var(--surface-2); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; }
+.cal-extras { display: flex; gap: 8px; font-size: 11px; color: var(--text-dim); }
+.week-day.out-month { opacity: .45; }

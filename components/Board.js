@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
-import { cardDeadline, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/deadlines";
+import { cardDue, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/deadlines";
+import { openAttachment, uploadFile } from "../lib/files";
+
+export function initials(person) {
+  const name = (person?.full_name || person?.email || "?").trim();
+  const parts = name.split(/\s+/);
+  return ((parts[0]?.[0] || "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
 
 function fmtDate(iso) {
   if (!iso) return "";
@@ -19,28 +26,11 @@ function checklistProgress(card) {
   return { done, total: list.length };
 }
 
-// Abre um anexo. Arquivos enviados ganham um link temporário na hora do clique,
-// assim o link nunca expira dentro do card.
-async function openAttachment(att, showToast) {
-  if (att.type !== "upload") {
-    window.open(att.url, "_blank", "noopener");
-    return;
-  }
-  const win = window.open("", "_blank");
-  const { data, error } = await supabase.storage.from("anexos").createSignedUrl(att.path, 60 * 60);
-  if (error || !data?.signedUrl) {
-    win?.close();
-    showToast("Não consegui abrir o arquivo.");
-    return;
-  }
-  if (win) win.location.href = data.signedUrl;
-  else window.location.href = data.signedUrl;
-}
-
 // Linha de produção de um cliente.
 // Equipe (admin/funcionário): todas as colunas, arrastar, criar e editar.
 // Cliente: só "Em aprovação", "Aprovados" e "Reprovados"; aprova, reprova e comenta.
-export default function Board({ client, isStaff, showToast }) {
+export default function Board({ client, isStaff, team = [], showToast }) {
+  const people = useMemo(() => Object.fromEntries(team.map((p) => [p.id, p])), [team]);
   const [cards, setCards] = useState({}); // id -> card
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState(null);
@@ -194,6 +184,7 @@ export default function Board({ client, isStaff, showToast }) {
               col={col}
               cards={columnCards[col.id] || []}
               isStaff={isStaff}
+              people={people}
               onOpen={(id) => setOpenId(id)}
               onAdd={async () => {
                 const card = await createCard(col.id);
@@ -214,6 +205,7 @@ export default function Board({ client, isStaff, showToast }) {
             onSave={(patch) => saveCard(openCard.id, patch)}
             onDelete={() => deleteCard(openCard.id)}
             showToast={showToast}
+            team={team}
           />
         ) : (
           <ReviewModal
@@ -227,7 +219,7 @@ export default function Board({ client, isStaff, showToast }) {
   );
 }
 
-function ColumnView({ col, cards, isStaff, onOpen, onAdd, onDrop, dragCardId }) {
+function ColumnView({ col, cards, isStaff, people, onOpen, onAdd, onDrop, dragCardId }) {
   const [hover, setHover] = useState(false);
   const dropProps = isStaff
     ? {
@@ -253,7 +245,7 @@ function ColumnView({ col, cards, isStaff, onOpen, onAdd, onDrop, dragCardId }) 
       <div className="col-cards">
         {cards.length === 0 && <div className="empty-col">Nada aqui.</div>}
         {cards.map((card) => (
-          <CardTile key={card.id} card={card} isStaff={isStaff} onOpen={onOpen} dragCardId={dragCardId} />
+          <CardTile key={card.id} card={card} isStaff={isStaff} assignee={people[card.assignee_id]} onOpen={onOpen} dragCardId={dragCardId} />
         ))}
       </div>
       {isStaff && (
@@ -265,11 +257,11 @@ function ColumnView({ col, cards, isStaff, onOpen, onAdd, onDrop, dragCardId }) 
   );
 }
 
-function CardTile({ card, isStaff, onOpen, dragCardId }) {
+function CardTile({ card, isStaff, assignee, onOpen, dragCardId }) {
   const prog = checklistProgress(card);
   const pct = prog.total ? Math.round((100 * prog.done) / prog.total) : 0;
   const barColor = (COLUMNS[COL_INDEX[card.column_id]] || {}).color || "var(--border)";
-  const deadline = isStaff ? cardDeadline(card, iso(new Date())) : null;
+  const deadline = isStaff ? cardDue(card, iso(new Date())) : null;
 
   return (
     <button
@@ -291,12 +283,19 @@ function CardTile({ card, isStaff, onOpen, dragCardId }) {
         {isStaff && card.sensitive && <span className="tag tag-sensitive">sensível</span>}
         {deadline && (
           <span className={"chip st-" + deadline.status.id} title={deadline.label}>
-            {deadline.short} {shortDate(deadline.due)}
+            prazo {shortDate(deadline.due)}
           </span>
         )}
       </div>
       <div className="card-foot">
-        <span className="card-date">{card.publish_date ? fmtDate(card.publish_date) : "—"}</span>
+        <span className="card-date">
+          {isStaff && (
+            <span className={"avatar" + (assignee ? "" : " empty")} title={assignee ? "Responsável: " + (assignee.full_name || assignee.email) : "Sem responsável"}>
+              {assignee ? initials(assignee) : "?"}
+            </span>
+          )}
+          {card.publish_date ? fmtDate(card.publish_date) : "—"}
+        </span>
         {isStaff && (
           <span className="card-progress">
             <span className="progress-bar">
@@ -313,7 +312,7 @@ function CardTile({ card, isStaff, onOpen, dragCardId }) {
   );
 }
 
-function AttachmentList({ attachments, onRemove, showToast }) {
+export function AttachmentList({ attachments, onRemove, showToast }) {
   if (!attachments || attachments.length === 0) return <div className="hint">Nenhum arquivo anexado ainda.</div>;
   return (
     <div className="attach-list">
@@ -522,7 +521,7 @@ function ReviewModal({ card, onClose, onReview, showToast }) {
   );
 }
 
-function CardModal({ card, onClose, onSave, onDelete, showToast }) {
+function CardModal({ card, onClose, onSave, onDelete, showToast, team }) {
   const [local, setLocal] = useState(card);
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -564,10 +563,7 @@ function CardModal({ card, onClose, onSave, onDelete, showToast }) {
     setUploading(true);
     showToast("Enviando " + file.name + "…");
     try {
-      const path = `${card.id}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from("anexos").upload(path, file);
-      if (upErr) throw upErr;
-      const next = [...(local.attachments || []), { type: "upload", path, name: file.name }];
+      const next = [...(local.attachments || []), await uploadFile(card.id, file)];
       setLocal((l) => ({ ...l, attachments: next }));
       onSave({ attachments: next });
       showToast("Arquivo anexado.");
@@ -622,6 +618,41 @@ function CardModal({ card, onClose, onSave, onDelete, showToast }) {
             {local.column_id === "aprovacao" && (
               <div className="hint">O cliente já está vendo esta peça e pode aprovar ou reprovar.</div>
             )}
+          </div>
+
+          <div className="field-row">
+            <div>
+              <label>Responsável</label>
+              <select
+                value={local.assignee_id || ""}
+                onChange={(e) => {
+                  const v = e.target.value || null;
+                  setLocal((l) => ({ ...l, assignee_id: v }));
+                  onSave({ assignee_id: v });
+                }}
+              >
+                <option value="">Ninguém ainda</option>
+                {team.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name || p.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label>Prazo</label>
+              <input
+                type="date"
+                value={local.due_date || ""}
+                onChange={(e) => setLocal((l) => ({ ...l, due_date: e.target.value || null }))}
+                onBlur={() => commit("due_date")}
+              />
+              {!local.due_date && cardDue(local, iso(new Date())) && (
+                <div className="hint">
+                  Automático: {cardDue(local, iso(new Date())).label.toLowerCase()} até {shortDate(cardDue(local, iso(new Date())).due)}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="field-row">

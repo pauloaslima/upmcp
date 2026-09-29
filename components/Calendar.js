@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MONTH_CAMPAIGNS, isoDate, specialDates } from "../lib/holidays";
 import { CALENDAR_FORMATS, formatStyle } from "../lib/pipeline";
+import { normalizeLink, removeFile, uploadFile } from "../lib/files";
+import { AttachmentList } from "./Board";
 
 export const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -53,11 +55,17 @@ export function EntryChip({ entry, onClick }) {
           ✎ {entry.notes}
         </span>
       )}
+      {((entry.photos || []).length > 0 || (entry.refs || []).length > 0) && (
+        <span className="cal-extras">
+          {(entry.photos || []).length > 0 && <span title="Fotos">📷 {entry.photos.length}</span>}
+          {(entry.refs || []).length > 0 && <span title="Referências">🔗 {entry.refs.length}</span>}
+        </span>
+      )}
     </Tag>
   );
 }
 
-export default function Calendar({ year, month, entries, readOnly, onPrev, onNext, onToday, onCreate, onUpdate, onDelete }) {
+export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(null); // { day } para novo, { entry } para existente
   const today = isoDate(new Date());
   const special = specialDates(year);
@@ -143,7 +151,7 @@ export default function Calendar({ year, month, entries, readOnly, onPrev, onNex
       </div>
 
       {editing && (
-        <EntryEditor
+        <EntryEditor client={client} showToast={showToast}
           key={editing.entry ? editing.entry.id : editing.day}
           day={editing.entry ? editing.entry.day : editing.day}
           entry={editing.entry}
@@ -168,17 +176,54 @@ export default function Calendar({ year, month, entries, readOnly, onPrev, onNex
   );
 }
 
-export function EntryEditor({ day, entry, specials, onClose, onSave, onDelete }) {
+export function EntryEditor({ day, entry, specials, client, showToast, onClose, onSave, onDelete }) {
   const [values, setValues] = useState({
     format: entry?.format || "",
     theme: entry?.theme || "",
     post_time: entry?.post_time || "",
-    notes: entry?.notes || ""
+    notes: entry?.notes || "",
+    photos: entry?.photos || [],
+    refs: entry?.refs || [],
+    use_client_identity: entry ? entry.use_client_identity !== false : true,
+    identity_notes: entry?.identity_notes || ""
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [newRef, setNewRef] = useState("");
+  const uploadedNow = useRef([]); // fotos enviadas nesta edição (apagadas se cancelar)
+  const photoRef = useRef(null);
   const themeRef = useRef(null);
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  closeRef.current = () => {
+    uploadedNow.current.forEach(removeFile);
+    onClose();
+  };
+  const cancel = () => closeRef.current();
+
+  async function addPhotos(e) {
+    const list = [...e.target.files];
+    e.target.value = "";
+    if (!list.length || !client) return;
+    setUploading(true);
+    try {
+      const added = [];
+      for (const f of list) added.push(await uploadFile(`calendar/${client.id}/${day}`, f));
+      uploadedNow.current.push(...added);
+      setValues((v) => ({ ...v, photos: [...v.photos, ...added] }));
+    } catch (err) {
+      console.error(err);
+      showToast?.("Não consegui subir a foto.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function addRef() {
+    const url = normalizeLink(newRef);
+    if (!url) return;
+    setValues((v) => ({ ...v, refs: [...v.refs, { type: "link", url, name: url.replace(/^https?:\/\//, "").slice(0, 50) }] }));
+    setNewRef("");
+  }
 
   useEffect(() => {
     themeRef.current?.focus();
@@ -198,11 +243,19 @@ export function EntryEditor({ day, entry, specials, onClose, onSave, onDelete })
   async function submit(e) {
     e.preventDefault();
     setSaving(true);
+    const kept = new Set(values.photos.map((p) => p.path));
+    // fotos tiradas da lista: apaga o arquivo
+    (entry?.photos || []).filter((p) => !kept.has(p.path)).forEach(removeFile);
+    uploadedNow.current = [];
     await onSave({
       format: values.format,
       theme: values.theme.trim(),
       post_time: values.post_time.trim(),
-      notes: values.notes.trim()
+      notes: values.notes.trim(),
+      photos: values.photos,
+      refs: values.refs,
+      use_client_identity: values.use_client_identity,
+      identity_notes: values.use_client_identity ? "" : values.identity_notes.trim()
     });
     setSaving(false);
   }
@@ -211,7 +264,7 @@ export function EntryEditor({ day, entry, specials, onClose, onSave, onDelete })
     <div
       className="overlay"
       onClick={(e) => {
-        if (e.target.classList.contains("overlay")) onClose();
+        if (e.target.classList.contains("overlay")) cancel();
       }}
     >
       <form className="modal modal-sm" onSubmit={submit}>
@@ -220,7 +273,7 @@ export function EntryEditor({ day, entry, specials, onClose, onSave, onDelete })
             <h3 className="entry-title">{entry ? "Editar tema" : "Novo tema"}</h3>
             <div className="entry-date">{title}</div>
           </div>
-          <button type="button" className="icon-btn" title="Fechar" onClick={onClose}>
+          <button type="button" className="icon-btn" title="Fechar" onClick={cancel}>
             ✕
           </button>
         </div>
@@ -273,6 +326,75 @@ export function EntryEditor({ day, entry, specials, onClose, onSave, onDelete })
             <textarea id="entry-notes" {...set("notes")} placeholder="Recados para a equipe ou para o cliente" rows={3} />
           </div>
 
+          {client && (
+            <>
+              <div>
+                <label>Fotos para o post</label>
+                <AttachmentList
+                  attachments={values.photos}
+                  showToast={showToast}
+                  onRemove={(idx) => setValues((v) => ({ ...v, photos: v.photos.filter((_, i) => i !== idx) }))}
+                />
+                <div className="attach-row" style={{ marginTop: 6 }}>
+                  <button type="button" className="file-btn" disabled={uploading} onClick={() => photoRef.current?.click()}>
+                    📷 {uploading ? "Enviando…" : "Enviar fotos"}
+                  </button>
+                  <input type="file" accept="image/*,video/*" multiple hidden ref={photoRef} onChange={addPhotos} />
+                </div>
+              </div>
+
+              <div>
+                <label>Referências</label>
+                <AttachmentList
+                  attachments={values.refs}
+                  showToast={showToast}
+                  onRemove={(idx) => setValues((v) => ({ ...v, refs: v.refs.filter((_, i) => i !== idx) }))}
+                />
+                <div className="ref-add">
+                  <input
+                    type="url"
+                    value={newRef}
+                    onChange={(e) => setNewRef(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addRef();
+                      }
+                    }}
+                    placeholder="Cole o link (Instagram, Pinterest, Drive…)"
+                  />
+                  <button type="button" className="btn btn-plain" onClick={addRef} disabled={!newRef.trim()}>
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label>Identidade visual</label>
+                <label className="sensitive-toggle identity-toggle">
+                  <input
+                    type="checkbox"
+                    checked={values.use_client_identity}
+                    onChange={(e) => setValues((v) => ({ ...v, use_client_identity: e.target.checked }))}
+                  />
+                  Usar a identidade do cliente
+                </label>
+                {values.use_client_identity ? (
+                  <div className="identity-preview">
+                    {client.identity ? client.identity : <em>O cliente ainda não tem identidade visual cadastrada (tela do cliente → Identidade visual).</em>}
+                    {(client.identity_files || []).length > 0 && <span> · {client.identity_files.length} arquivo(s) de marca</span>}
+                  </div>
+                ) : (
+                  <textarea
+                    rows={3}
+                    {...set("identity_notes")}
+                    placeholder="Identidade específica deste post: cores, fontes, estilo…"
+                  />
+                )}
+              </div>
+            </>
+          )}
+
           <div className="modal-footer">
             {onDelete ? (
               <button
@@ -288,7 +410,7 @@ export function EntryEditor({ day, entry, specials, onClose, onSave, onDelete })
               <span></span>
             )}
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" className="btn btn-plain" onClick={onClose}>
+              <button type="button" className="btn btn-plain" onClick={cancel}>
                 Cancelar
               </button>
               <button type="submit" className="btn btn-gold" disabled={saving}>

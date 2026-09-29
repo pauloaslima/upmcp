@@ -4,28 +4,36 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { isoDate, specialDates } from "../lib/holidays";
 import { COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
-import { addDays, iso, mondayOf, parse, productionWeek, rangeLabel, shortDate, taskStatus, weeklyTasks } from "../lib/deadlines";
+import { addDays, iso, mondayOf, monthWeeks, parse, productionWeek, rangeLabel, shortDate, taskStatus, weeklyTasks } from "../lib/deadlines";
 import { useCalendarEntries } from "../lib/useCalendarEntries";
 import { useClientTasks } from "../lib/useClientTasks";
-import { EntryChip, EntryEditor, SpecialDates, WEEKDAYS } from "./Calendar";
+import { EntryChip, EntryEditor, MONTHS, SpecialDates, WEEKDAYS } from "./Calendar";
 
 const STEP_SHORT = { design: "Design", ajustes: "Ajustes", aprovacao: "Aprovação" };
 
 // Conteúdo da semana.
-// Equipe: 4 semanas (segunda a domingo), com os prazos de produção de cada uma
-// (2 semanas antes: design até quarta, ajustes quinta, aprovação sexta) e o botão que
-// transforma os temas em peças na linha de produção.
+// Equipe: todas as semanas (segunda a domingo) do mês vigente, do dia 1 ao último dia, com os
+// prazos de produção de cada uma (2 semanas antes: design até quarta, ajustes quinta, aprovação
+// sexta) e o botão que transforma os temas em peças. Setas levam ao mês anterior/seguinte.
 // Cliente: só a semana atual, para consulta.
 export default function WeekContent({ client, isStaff, showToast, onOpenProduction }) {
   const todayIso = iso(new Date());
   const thisMonday = mondayOf(parse(todayIso));
-  const [start, setStart] = useState(thisMonday);
-  const weekCount = isStaff ? 4 : 1;
-  const weeks = useMemo(
-    () => Array.from({ length: weekCount }, (_, w) => Array.from({ length: 7 }, (_, d) => addDays(isStaff ? start : thisMonday, w * 7 + d))),
+  const [ym, setYm] = useState(() => {
+    const t = parse(todayIso);
+    return { year: t.getFullYear(), month: t.getMonth() + 1 };
+  });
+  const weeks = useMemo(() => {
+    const mondays = isStaff ? monthWeeks(ym.year, ym.month) : [thisMonday];
+    return mondays.map((m) => Array.from({ length: 7 }, (_, d) => addDays(m, d)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [start, weekCount, isStaff]
-  );
+  }, [ym, isStaff]);
+  const shiftMonth = (delta) =>
+    setYm(({ year, month }) => {
+      const d = new Date(year, month - 1 + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() + 1 };
+    });
+  const inMonth = (d) => !isStaff || (d.getFullYear() === ym.year && d.getMonth() + 1 === ym.month);
   const first = iso(weeks[0][0]);
   const last = iso(weeks[weeks.length - 1][6]);
   const { entries, create, update, remove } = useCalendarEntries(client.id, first, last, showToast);
@@ -76,7 +84,16 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
         format: FORMATS.includes(entry.format) ? entry.format : "Outro",
         publish_date: entry.day,
         client: client.name,
-        client_id: client.id
+        client_id: client.id,
+        assignee_id: client.responsible_id || null,
+        // fotos e referências do tema viram anexos da peça; a identidade vai para "referência visual"
+        attachments: [...(entry.photos || []), ...(entry.refs || [])],
+        visual_ref:
+          entry.use_client_identity === false
+            ? entry.identity_notes || ""
+            : client.identity
+              ? "Identidade do cliente: " + client.identity
+              : ""
       })
       .select("id, column_id, title")
       .single();
@@ -106,18 +123,32 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
     <div className="cal week">
       <div className="cal-head">
         {isStaff && (
-          <button className="cal-nav" onClick={() => setStart((s) => addDays(s, -7))} aria-label="Semana anterior">
+          <button className="cal-nav" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
             ‹
           </button>
         )}
-        <h2 className="cal-title">{isStaff ? `${rangeLabel(first, last)}` : `Semana ${rangeLabel(first, last)}`}</h2>
+        <h2 className="cal-title">
+          {isStaff ? (
+            <>
+              {MONTHS[ym.month - 1]} <span>|</span> {ym.year}
+            </>
+          ) : (
+            `Semana ${rangeLabel(first, last)}`
+          )}
+        </h2>
         {isStaff && (
           <>
-            <button className="cal-nav" onClick={() => setStart((s) => addDays(s, 7))} aria-label="Próxima semana">
+            <button className="cal-nav" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
               ›
             </button>
-            <button className="cal-today" onClick={() => setStart(thisMonday)}>
-              A partir de hoje
+            <button
+              className="cal-today"
+              onClick={() => {
+                const t = parse(todayIso);
+                setYm({ year: t.getFullYear(), month: t.getMonth() + 1 });
+              }}
+            >
+              Mês atual
             </button>
           </>
         )}
@@ -179,7 +210,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                 const key = iso(d);
                 const list = byDay[key] || [];
                 return (
-                  <div key={key} className={"week-day" + (key === todayIso ? " is-today" : "")}>
+                  <div key={key} className={"week-day" + (key === todayIso ? " is-today" : "") + (inMonth(d) ? "" : " out-month")}>
                     <div className="week-day-head">
                       <span className="cal-daynum">{d.getDate()}</span>
                       <strong>{WEEKDAYS[d.getDay()]}</strong>
@@ -222,7 +253,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
       })}
 
       {editing && (
-        <EntryEditor
+        <EntryEditor client={client} showToast={showToast}
           key={editing.entry ? editing.entry.id : editing.day}
           day={editing.entry ? editing.entry.day : editing.day}
           entry={editing.entry}
