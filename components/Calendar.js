@@ -5,6 +5,7 @@ import { MONTH_CAMPAIGNS, isoDate, specialDates } from "../lib/holidays";
 import { CALENDAR_FORMATS, formatStyle } from "../lib/pipeline";
 import { normalizeLink, removeFile, uploadFile } from "../lib/files";
 import { AttachmentList } from "./Board";
+import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -54,6 +55,9 @@ export function EntryChip({ entry, onClick }) {
         <span className="cal-note" title={entry.notes}>
           ✎ {entry.notes}
         </span>
+      )}
+      {entry.brief_status && entry.brief_status !== "rascunho" && (
+        <span className={"cal-brief brief-" + entry.brief_status}>{BRIEF_STATUS[entry.brief_status]?.short}</span>
       )}
       {((entry.photos || []).length > 0 || (entry.refs || []).length > 0) && (
         <span className="cal-extras">
@@ -187,6 +191,9 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     use_client_identity: entry ? entry.use_client_identity !== false : true,
     identity_notes: entry?.identity_notes || ""
   });
+  const [brief, setBrief] = useState(() => briefWithDefaults(entry, day));
+  const [briefStatus, setBriefStatus] = useState(entry?.brief_status || "rascunho");
+  const setB = (key) => ({ value: brief[key], onChange: (e) => setBrief((b) => ({ ...b, [key]: e.target.value })) });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [newRef, setNewRef] = useState("");
@@ -240,8 +247,28 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     return { value: values[key], onChange: (e) => setValues((v) => ({ ...v, [key]: e.target.value })) };
   }
 
+  const draftEntry = { ...entry, ...values, day };
+  const missing = missingForReady(draftEntry, brief);
+
+  function copyBrief() {
+    const p = designerPayload({ entry: draftEntry, brief, client });
+    const text =
+      `${p.title}\n` +
+      `Cliente final: ${p.cliente_final}\nTipo de solicitação: ${p.tipo_de_solicitacao || "—"}\n` +
+      `Prioridade: ${p.prioridade}\nPrazo: ${p.prazo_texto || "—"}\nLabels: ${p.labels.join(", ") || "—"}\n\n` +
+      p.descricao;
+    navigator.clipboard?.writeText(text).then(
+      () => showToast?.("Briefing copiado. Cole no card do designer."),
+      () => showToast?.("Não consegui copiar.")
+    );
+  }
+
   async function submit(e) {
     e.preventDefault();
+    if (briefStatus === "pronto" && missing.length) {
+      showToast?.("Para marcar como pronto, falta: " + missing.join(", ") + ".");
+      return;
+    }
     setSaving(true);
     const kept = new Set(values.photos.map((p) => p.path));
     // fotos tiradas da lista: apaga o arquivo
@@ -255,7 +282,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
       photos: values.photos,
       refs: values.refs,
       use_client_identity: values.use_client_identity,
-      identity_notes: values.use_client_identity ? "" : values.identity_notes.trim()
+      identity_notes: values.use_client_identity ? "" : values.identity_notes.trim(),
+      ...(client ? { brief, brief_status: briefStatus } : {})
     });
     setSaving(false);
   }
@@ -267,7 +295,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
         if (e.target.classList.contains("overlay")) cancel();
       }}
     >
-      <form className="modal modal-sm" onSubmit={submit}>
+      <form className={"modal " + (client ? "modal-md" : "modal-sm")} onSubmit={submit}>
         <div className="modal-head">
           <div style={{ flex: 1 }}>
             <h3 className="entry-title">{entry ? "Editar tema" : "Novo tema"}</h3>
@@ -297,7 +325,17 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                   key={f}
                   className={"format-chip" + (values.format === f ? " on" : "")}
                   style={values.format === f ? formatStyle(f) : undefined}
-                  onClick={() => setValues((v) => ({ ...v, format: v.format === f ? "" : f }))}
+                  onClick={() => {
+                    const next = values.format === f ? "" : f;
+                    setValues((v) => ({ ...v, format: next }));
+                    // sugere tipo de solicitação e onde será usada, sem apagar o que já foi escolhido
+                    const d = briefWithDefaults({ format: next, day }, day);
+                    setBrief((b) => ({
+                      ...b,
+                      request_type: b.request_type || d.request_type,
+                      placements: b.placements.length ? b.placements : d.placements
+                    }));
+                  }}
                 >
                   {f}
                 </button>
@@ -367,6 +405,12 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                     Adicionar
                   </button>
                 </div>
+                <textarea
+                  rows={2}
+                  style={{ marginTop: 6 }}
+                  {...setB("refs_note")}
+                  placeholder="O que aproveitar da referência (ex.: fazer as frases no estilo da ref)"
+                />
               </div>
 
               <div>
@@ -392,6 +436,119 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                   />
                 )}
               </div>
+
+              <section className="brief">
+                <div className="brief-head">
+                  <h4>Briefing para o design</h4>
+                  <span className={"chip brief-" + briefStatus}>{BRIEF_STATUS[briefStatus].label}</span>
+                </div>
+                <div className="brief-grid">
+                  <div>
+                    <label htmlFor="b-type">Tipo de solicitação</label>
+                    <select id="b-type" {...setB("request_type")}>
+                      <option value="">Escolha…</option>
+                      {REQUEST_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="b-prio">Prioridade</label>
+                    <select id="b-prio" {...setB("priority")}>
+                      {PRIORITIES.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="b-due">Prazo do design</label>
+                    <input id="b-due" type="datetime-local" {...setB("due_at")} />
+                  </div>
+                </div>
+
+                <div>
+                  <label>Onde a arte será usada</label>
+                  <div className="pick-list">
+                    {PLACEMENTS.map((p) => (
+                      <label key={p} className={"pick" + (brief.placements.includes(p) ? " on" : "")}>
+                        <input
+                          type="checkbox"
+                          checked={brief.placements.includes(p)}
+                          onChange={() =>
+                            setBrief((b) => ({
+                              ...b,
+                              placements: b.placements.includes(p) ? b.placements.filter((x) => x !== p) : [...b.placements, p]
+                            }))
+                          }
+                        />
+                        {p}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="b-must">▲ Não pode faltar nesta peça</label>
+                  <textarea id="b-must" rows={3} {...setB("must_have")} placeholder={"Um item por linha. Ex.:\nRodapé padrão\nMúsica elegante\nLegendas"} />
+                </div>
+
+                <div>
+                  <label htmlFor="b-notes">⚠ Observações importantes</label>
+                  <textarea
+                    id="b-notes"
+                    rows={3}
+                    {...setB("important_notes")}
+                    placeholder="Criativo, takes a usar, frases sobrepostas, música, o que evitar…"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="b-text">🎯 Título + texto da peça</label>
+                  <textarea
+                    id="b-text"
+                    rows={5}
+                    {...setB("piece_text")}
+                    placeholder={"Texto que vai na arte. Carrossel: separe por página.\nPágina 1: …\nPágina 2: …"}
+                  />
+                </div>
+
+                {briefStatus === "enviado" ? (
+                  <div className="brief-sent">
+                    Enviado ao design{entry?.brief_sent_at ? " em " + new Date(entry.brief_sent_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : ""}
+                    {entry?.designer_card_url && (
+                      <>
+                        {" · "}
+                        <a href={entry.designer_card_url} target="_blank" rel="noopener noreferrer">
+                          abrir card do designer
+                        </a>
+                      </>
+                    )}
+                    <button type="button" className="link-btn inline" onClick={() => setBriefStatus("pronto")}>
+                      reabrir
+                    </button>
+                  </div>
+                ) : (
+                  <label className="sensitive-toggle brief-ready">
+                    <input
+                      type="checkbox"
+                      checked={briefStatus === "pronto"}
+                      onChange={(e) => setBriefStatus(e.target.checked ? "pronto" : "rascunho")}
+                    />
+                    <span>
+                      Briefing pronto para enviar ao design
+                      {missing.length > 0 && <small> · falta: {missing.join(", ")}</small>}
+                    </span>
+                  </label>
+                )}
+
+                <button type="button" className="btn btn-plain" onClick={copyBrief}>
+                  Copiar briefing
+                </button>
+              </section>
             </>
           )}
 

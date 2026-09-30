@@ -7,6 +7,7 @@ import { COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
 import { addDays, iso, mondayOf, monthWeeks, parse, productionWeek, rangeLabel, shortDate, taskStatus, weeklyTasks } from "../lib/deadlines";
 import { useCalendarEntries } from "../lib/useCalendarEntries";
 import { useClientTasks } from "../lib/useClientTasks";
+import { briefDescription, briefWithDefaults } from "../lib/brief";
 import { EntryChip, EntryEditor, MONTHS, SpecialDates, WEEKDAYS } from "./Calendar";
 
 const STEP_SHORT = { design: "Design", ajustes: "Ajustes", aprovacao: "Aprovação" };
@@ -103,6 +104,11 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
       return false;
     }
     if (entry.notes) await supabase.from("card_comments").insert({ card_id: card.id, body: "Do calendário: " + entry.notes });
+    if (entry.brief && Object.keys(entry.brief).length) {
+      const brief = briefWithDefaults(entry, entry.day);
+      await supabase.from("card_comments").insert({ card_id: card.id, body: "Briefing para o design:\n\n" + briefDescription(entry, brief, client.identity) });
+      if (brief.piece_text) await supabase.from("cards").update({ copy: brief.piece_text }).eq("id", card.id);
+    }
     await update(entry.id, { card_id: card.id });
     setCards((prev) => ({ ...prev, [card.id]: card }));
     return true;

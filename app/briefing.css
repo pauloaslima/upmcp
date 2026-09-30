@@ -1,0 +1,24 @@
+/* ---------- briefing para o design ---------- */
+.modal-md { max-width: 720px; }
+.brief { display: flex; flex-direction: column; gap: 14px; border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--surface-2); }
+.brief-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.brief-head h4 { margin: 0; font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; }
+.brief-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.brief textarea, .brief select, .brief input[type=datetime-local] { background: var(--surface); }
+.brief input[type=datetime-local] { width: 100%; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 7px 10px; font-family: inherit; font-size: 13px; }
+.brief > .btn { align-self: flex-start; }
+.brief-ready { align-items: flex-start; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.brief-ready small { color: var(--gold-ink); font-weight: 600; }
+.brief-sent { font-size: 13px; color: var(--teal); font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.brief-sent a { color: var(--ink-2); }
+.link-btn.inline { display: inline; margin: 0 0 0 auto; }
+.chip.brief-rascunho { color: var(--text-dim); }
+.chip.brief-pronto { color: var(--gold-ink); border-color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, transparent); }
+.chip.brief-enviado { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, transparent); background: color-mix(in srgb, var(--teal) 10%, transparent); }
+.cal-brief { align-self: flex-start; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; padding: 1px 6px; border-radius: 4px; }
+.cal-brief.brief-pronto { background: color-mix(in srgb, var(--gold) 20%, transparent); color: var(--gold-ink); }
+.cal-brief.brief-enviado { background: color-mix(in srgb, var(--teal) 16%, transparent); color: var(--teal); }
+
+/* janelas: o título fica preso no topo sem o conteúdo passar por cima dele */
+.overlay { padding-top: 0; padding-bottom: 0; }
+.overlay > .modal { margin: 5vh 0; }
