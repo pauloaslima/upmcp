@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { shortName } from "../lib/people";
 import { addDays, checklistFor, iso, parse, shortDate, taskKey, taskStatus } from "../lib/deadlines";
 import { useClientTasks } from "../lib/useClientTasks";
 
@@ -11,7 +12,6 @@ export default function ClientChecklist({ client, team, onSetResponsible, showTo
   const groups = useMemo(() => checklistFor(today), [today]);
   const { isDone, doneRow, rowOf, toggle, setAssignee } = useClientTasks(client.id, iso(addDays(parse(today), -60)), showToast);
   const byId = Object.fromEntries(team.map((p) => [p.id, p]));
-  const firstName = (p) => (p ? (p.full_name || p.email).split(" ")[0] : "");
 
   return (
     <section className="checklist-panel">
@@ -56,7 +56,7 @@ export default function ClientChecklist({ client, team, onSetResponsible, showTo
                   />
                   <span className="task-label">{t.label}</span>
                   <span className="task-due">{shortDate(t.due)}</span>
-                  <span className="task-status">{done && by ? "feito por " + firstName(by) : st.label}</span>
+                  <span className="task-status">{done && by ? "feito por " + shortName(by) : st.label}</span>
                   <select
                     className="task-assignee"
                     value={assignee}
@@ -64,7 +64,7 @@ export default function ClientChecklist({ client, team, onSetResponsible, showTo
                     title="Responsável por esta tarefa"
                   >
                     <option value="">
-                      {client.responsible_id ? `${firstName(byId[client.responsible_id])} (responsável do cliente)` : "Sem responsável"}
+                      {client.responsible_id ? `${shortName(byId[client.responsible_id])} (responsável do cliente)` : "Sem responsável"}
                     </option>
                     {team.map((p) => (
                       <option key={p.id} value={p.id}>

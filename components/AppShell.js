@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { shortName } from "../lib/people";
 import { supabase } from "../lib/supabaseClient";
 import Board from "./Board";
 import ClientCalendar from "./ClientCalendar";
@@ -144,7 +145,7 @@ export default function AppShell({ session, profile }) {
     setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, responsible_id: responsibleId } : c)));
     const who = team.find((p) => p.id === responsibleId);
     const name = clients.find((c) => c.id === clientId)?.name || "Cliente";
-    showToast(who ? `${name} agora é responsabilidade de ${(who.full_name || who.email).split(" ")[0]}.` : `${name} ficou sem responsável.`);
+    showToast(who ? `${name} agora é responsabilidade de ${shortName(who)}.` : `${name} ficou sem responsável.`);
   }
 
   const current = view.page === "cliente" ? clients.find((c) => c.id === view.clientId) || null : null;

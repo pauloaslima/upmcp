@@ -1,0 +1,34 @@
+/* ---------- alinhamento geral ----------
+   Um único padrão de largura para o conteúdo das páginas: tudo que fica empilhado
+   (opções do cliente, checklist, equipe, perfil, tarefas, rotina, usuários) usa a
+   mesma largura máxima, então as bordas esquerda e direita sempre batem.
+   Este arquivo é carregado por último e manda nas larguras. */
+:root { --content-max: 1100px; }
+
+.hub-grid,
+.checklist-panel,
+.profile-panel,
+.hub-panels,
+.tasks,
+.users,
+.routine-manager { width: 100%; max-width: var(--content-max); }
+
+.hub-lead { max-width: var(--content-max); }
+
+/* opções do cliente: sempre lado a lado com a mesma largura (4 no computador, 2 no tablet, 1 no celular) */
+.hub-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .hub-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .hub-grid { grid-template-columns: 1fr; } }
+
+/* checklist: os 4 grupos (calendários + 3 semanas) na mesma linha, sem um grupo sobrando embaixo */
+.checklist-groups { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; }
+@media (max-width: 1250px) { .checklist-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .checklist-groups { grid-template-columns: 1fr; } }
+
+/* equipe do cliente ocupa a largura toda, como os outros painéis */
+.hub-panels { grid-template-columns: 1fr; }
+
+/* tarefa do checklist: caixinha alinhada à primeira linha do título, não ao meio do item */
+.task { align-items: start; }
+.task input[type=checkbox] { align-self: start; margin-top: 2px; }
+.task-due { align-self: start; margin-top: 2px; }

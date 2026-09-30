@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { shortName } from "../lib/people";
 import { supabase } from "../lib/supabaseClient";
 import { initials } from "./Board";
 
@@ -116,7 +117,7 @@ export default function AssignmentsPage({ clients, team, onSetResponsible, onOpe
                       {others.length > 0 && (
                         <div className="assign-others">
                           também na equipe:{" "}
-                          {others.map((m) => (people[m.user_id]?.full_name || people[m.user_id]?.email || "—").split(" ")[0] + (m.role_label ? ` (${m.role_label})` : "")).join(", ")}
+                          {others.map((m) => (shortName(people[m.user_id]) || "—") + (m.role_label ? ` (${m.role_label})` : "")).join(", ")}
                         </div>
                       )}
                       <select
