@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { uploadFile, removeFile } from "../lib/files";
+import { normalizeLink, uploadFile, removeFile } from "../lib/files";
 import { AttachmentList } from "./Board";
 
 // Equipe do cliente: funcionários ligados a ele (com a função de cada um) e os logins do próprio cliente.
@@ -126,26 +126,64 @@ export function ClientTeam({ client, team, isAdmin, showToast, onMembersChange }
   );
 }
 
-// Identidade visual do cliente: texto (cores, fontes, tom) e arquivos (logo, manual de marca)
-export function ClientIdentity({ client, showToast, onSaved }) {
-  const [text, setText] = useState(client.identity || "");
+// Perfil do cliente: posicionamento, identidade visual (texto + arquivos), observações importantes e Drive.
+// É a base que a equipe e os agentes (conteúdo e design) consultam antes de criar.
+const PROFILE_FIELDS = [
+  {
+    key: "positioning",
+    label: "Posicionamento",
+    rows: 4,
+    placeholder: "Quem é o cliente, o que vende, para quem, diferenciais, tom de voz, pilares de conteúdo…"
+  },
+  {
+    key: "identity",
+    label: "Identidade visual",
+    rows: 4,
+    placeholder: "Cores (ex.: #1B2A4A, dourado), fontes, estilo das fotos, elementos obrigatórios, o que evitar…"
+  },
+  {
+    key: "notes",
+    label: "Observações importantes",
+    rows: 4,
+    placeholder: "Assuntos proibidos, pedidos recorrentes do cliente, aprovações sensíveis, datas da empresa…"
+  }
+];
+
+export function ClientProfile({ client, showToast, onSaved }) {
+  const initial = () => ({
+    positioning: client.positioning || "",
+    identity: client.identity || "",
+    notes: client.notes || "",
+    drive_url: client.drive_url || ""
+  });
+  const [values, setValues] = useState(initial);
   const [files, setFiles] = useState(client.identity_files || []);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
-    setText(client.identity || "");
+    setValues(initial());
     setFiles(client.identity_files || []);
-  }, [client.id, client.identity, client.identity_files]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id, client.positioning, client.identity, client.notes, client.drive_url, client.identity_files]);
 
-  async function save(values) {
-    const { error } = await supabase.from("clients").update(values).eq("id", client.id);
+  async function save(patch) {
+    const { error } = await supabase.from("clients").update(patch).eq("id", client.id);
     if (error) {
       console.error(error);
-      showToast("Não consegui salvar a identidade visual.");
+      showToast("Não consegui salvar o perfil do cliente.");
       return;
     }
-    onSaved(values);
+    onSaved(patch);
+  }
+
+  function commit(key) {
+    let v = values[key].trim();
+    if (key === "drive_url" && v) {
+      v = normalizeLink(v);
+      setValues((s) => ({ ...s, drive_url: v }));
+    }
+    if (v !== (client[key] || "")) save({ [key]: v });
   }
 
   async function handleFile(e) {
@@ -174,27 +212,63 @@ export function ClientIdentity({ client, showToast, onSaved }) {
   }
 
   return (
-    <section className="checklist-panel">
+    <section className="checklist-panel profile-panel">
       <div className="checklist-head">
-        <h3>Identidade visual</h3>
+        <h3>Perfil do cliente</h3>
+        <span className="hint">salva sozinho ao sair de cada campo</span>
       </div>
-      <textarea
-        rows={4}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => text !== (client.identity || "") && save({ identity: text })}
-        placeholder="Cores (ex.: #1B2A4A, dourado), fontes, estilo das fotos, tom de voz, o que evitar…"
-      />
-      <div style={{ marginTop: 10 }}>
-        <AttachmentList attachments={files} onRemove={removeAt} showToast={showToast} />
+
+      <div className="profile-grid">
+        {PROFILE_FIELDS.map((f) => (
+          <div key={f.key} className={"profile-field" + (f.key === "notes" ? " wide" : "")}>
+            <label htmlFor={"pf-" + f.key}>{f.label}</label>
+            <textarea
+              id={"pf-" + f.key}
+              rows={f.rows}
+              value={values[f.key]}
+              onChange={(e) => setValues((s) => ({ ...s, [f.key]: e.target.value }))}
+              onBlur={() => commit(f.key)}
+              placeholder={f.placeholder}
+            />
+            {f.key === "identity" && (
+              <>
+                <div style={{ marginTop: 8 }}>
+                  <AttachmentList attachments={files} onRemove={removeAt} showToast={showToast} />
+                </div>
+                <div className="attach-row" style={{ marginTop: 6 }}>
+                  <button className="file-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
+                    📎 {uploading ? "Enviando…" : "Logo, manual de marca, paleta…"}
+                  </button>
+                  <input type="file" ref={fileRef} hidden onChange={handleFile} />
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+
+        <div className="profile-field wide">
+          <label htmlFor="pf-drive">Link do Drive</label>
+          <div className="ref-add">
+            <input
+              id="pf-drive"
+              type="url"
+              value={values.drive_url}
+              onChange={(e) => setValues((s) => ({ ...s, drive_url: e.target.value }))}
+              onBlur={() => commit("drive_url")}
+              placeholder="https://drive.google.com/drive/folders/…"
+            />
+            {client.drive_url && (
+              <a className="btn btn-plain" href={client.drive_url} target="_blank" rel="noopener noreferrer">
+                Abrir pasta
+              </a>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="attach-row" style={{ marginTop: 8 }}>
-        <button className="file-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
-          📎 {uploading ? "Enviando…" : "Logo, manual de marca, paleta…"}
-        </button>
-        <input type="file" ref={fileRef} hidden onChange={handleFile} />
+      <div className="hint">
+        Nos temas do Conteúdo da semana, “Usar a identidade do cliente” puxa a identidade visual daqui. Os agentes de conteúdo e de
+        design também consultam este perfil.
       </div>
-      <div className="hint">Nos temas do Conteúdo da semana, “Usar a identidade do cliente” puxa estas informações.</div>
     </section>
   );
 }

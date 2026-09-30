@@ -12,7 +12,7 @@ import Notifications from "./Notifications";
 import { PasswordForm } from "./Login";
 import TasksPage from "./TasksPage";
 import RoutinesPage from "./RoutinesPage";
-import { ClientIdentity, ClientTeam } from "./ClientTeam";
+import { ClientProfile, ClientTeam } from "./ClientTeam";
 import AssignmentsPage from "./AssignmentsPage";
 
 const VIEW_KEY = "upfluxo:view";
@@ -512,6 +512,14 @@ export default function AppShell({ session, profile }) {
                     ))}
                   </div>
                   {isStaff && (
+                    <ClientProfile
+                      key={"profile-" + current.id}
+                      client={current}
+                      showToast={showToast}
+                      onSaved={(values) => setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, ...values } : c)))}
+                    />
+                  )}
+                  {isStaff && (
                     <ClientChecklist
                       key={current.id}
                       client={current}
@@ -523,12 +531,6 @@ export default function AppShell({ session, profile }) {
                   {isStaff && (
                     <div className="hub-panels">
                       <ClientTeam key={"team-" + current.id} client={current} team={team} isAdmin={isAdmin} showToast={showToast} onMembersChange={loadMembership} />
-                      <ClientIdentity
-                        key={"id-" + current.id}
-                        client={current}
-                        showToast={showToast}
-                        onSaved={(values) => setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, ...values } : c)))}
-                      />
                     </div>
                   )}
                 </div>

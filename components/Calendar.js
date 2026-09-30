@@ -56,6 +56,7 @@ export function EntryChip({ entry, onClick }) {
           ✎ {entry.notes}
         </span>
       )}
+      {entry.created_by_agent && <span className="cal-agent">sugerido pelo agente</span>}
       {entry.brief_status && entry.brief_status !== "rascunho" && (
         <span className={"cal-brief brief-" + entry.brief_status}>{BRIEF_STATUS[entry.brief_status]?.short}</span>
       )}
@@ -283,7 +284,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
       refs: values.refs,
       use_client_identity: values.use_client_identity,
       identity_notes: values.use_client_identity ? "" : values.identity_notes.trim(),
-      ...(client ? { brief, brief_status: briefStatus } : {})
+      // salvar pela equipe = tema revisado (tira a marca "sugerido pelo agente")
+      ...(client ? { brief, brief_status: briefStatus, created_by_agent: false } : {})
     });
     setSaving(false);
   }

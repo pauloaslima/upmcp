@@ -22,3 +22,11 @@
 /* janelas: o título fica preso no topo sem o conteúdo passar por cima dele */
 .overlay { padding-top: 0; padding-bottom: 0; }
 .overlay > .modal { margin: 5vh 0; }
+
+/* ---------- perfil do cliente ---------- */
+.profile-panel { max-width: 900px; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 6px; }
+.profile-field.wide { grid-column: 1 / -1; }
+.profile-field textarea { background: var(--surface-2); }
+.ref-add .btn { text-decoration: none; }
+.cal-agent { align-self: flex-start; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--cal-accent) 16%, transparent); color: var(--cal-accent); }
