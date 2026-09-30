@@ -9,6 +9,7 @@ import { useCalendarEntries } from "../lib/useCalendarEntries";
 import { useClientTasks } from "../lib/useClientTasks";
 import { briefDescription, briefWithDefaults } from "../lib/brief";
 import { EntryChip, EntryEditor, MONTHS, SpecialDates, WEEKDAYS } from "./Calendar";
+import AgentDialog from "./AgentDialog";
 
 const STEP_SHORT = { design: "Design", ajustes: "Ajustes", aprovacao: "Aprovação" };
 
@@ -37,10 +38,11 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
   const inMonth = (d) => !isStaff || (d.getFullYear() === ym.year && d.getMonth() + 1 === ym.month);
   const first = iso(weeks[0][0]);
   const last = iso(weeks[weeks.length - 1][6]);
-  const { entries, create, update, remove } = useCalendarEntries(client.id, first, last, showToast);
+  const { entries, create, update, remove, addLocal } = useCalendarEntries(client.id, first, last, showToast);
   const tasks = useClientTasks(isStaff ? client.id : false, iso(addDays(parse(first), -1)), showToast);
   const [cards, setCards] = useState({});
   const [editing, setEditing] = useState(null);
+  const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Criar temas com IA"
   const [busy, setBusy] = useState(false);
 
   // situação das peças já criadas a partir dos temas (só a equipe enxerga)
@@ -204,6 +206,9 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                       </span>
                     );
                   })}
+                  <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
+                    ✨ Criar temas com IA
+                  </button>
                   <button className="btn btn-gold week-send-all" disabled={busy || pending === 0} onClick={() => sendWeek(days)}>
                     {pending ? `Criar ${pending} peça(s)` : "Tudo na produção"}
                   </button>
@@ -257,6 +262,18 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
           </section>
         );
       })}
+
+      {agentWeek && (
+        <AgentDialog
+          client={client}
+          weekStart={agentWeek.start}
+          weekEnd={agentWeek.end}
+          existingCount={agentWeek.count}
+          onClose={() => setAgentWeek(null)}
+          onCreated={addLocal}
+          showToast={showToast}
+        />
+      )}
 
       {editing && (
         <EntryEditor client={client} showToast={showToast}

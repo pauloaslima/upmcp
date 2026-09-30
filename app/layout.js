@@ -5,6 +5,7 @@ import "./login.css";
 import "./tarefas.css";
 import "./atribuicoes.css";
 import "./briefing.css";
+import "./agente.css";
 import "./alinhamento.css";
 
 export const metadata = {
