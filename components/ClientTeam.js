@@ -149,41 +149,75 @@ const PROFILE_FIELDS = [
   }
 ];
 
+// Abre só para leitura. Para mudar: "Editar" → alterar → "Salvar alterações" (pede confirmação).
+// "Cancelar" descarta tudo, inclusive arquivos enviados durante a edição.
 export function ClientProfile({ client, showToast, onSaved }) {
-  const initial = () => ({
+  const fromClient = () => ({
     positioning: client.positioning || "",
     identity: client.identity || "",
     notes: client.notes || "",
-    drive_url: client.drive_url || ""
+    drive_url: client.drive_url || "",
+    identity_files: client.identity_files || []
   });
-  const [values, setValues] = useState(initial);
-  const [files, setFiles] = useState(client.identity_files || []);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(fromClient);
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const uploadedNow = useRef([]); // arquivos enviados nesta edição
   const fileRef = useRef(null);
 
   useEffect(() => {
-    setValues(initial());
-    setFiles(client.identity_files || []);
+    if (!editing) setDraft(fromClient());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client.id, client.positioning, client.identity, client.notes, client.drive_url, client.identity_files]);
+  }, [client.id, client.positioning, client.identity, client.notes, client.drive_url, client.identity_files, editing]);
 
-  async function save(patch) {
+  const saved = fromClient();
+  const changed =
+    ["positioning", "identity", "notes", "drive_url"].some((k) => draft[k].trim() !== saved[k]) ||
+    draft.identity_files.map((f) => f.path || f.url).join("|") !== saved.identity_files.map((f) => f.path || f.url).join("|");
+
+  function startEdit() {
+    uploadedNow.current = [];
+    setDraft(fromClient());
+    setEditing(true);
+  }
+
+  function cancel() {
+    if (changed && !confirm("Descartar as alterações do perfil?")) return;
+    uploadedNow.current.forEach(removeFile);
+    uploadedNow.current = [];
+    setDraft(fromClient());
+    setEditing(false);
+  }
+
+  async function save() {
+    if (!changed) {
+      setEditing(false);
+      return;
+    }
+    if (!confirm(`Salvar as alterações no perfil de ${client.name}?\n\nEssas informações são usadas pela equipe e pelos agentes de conteúdo e design.`)) return;
+    const patch = {
+      positioning: draft.positioning.trim(),
+      identity: draft.identity.trim(),
+      notes: draft.notes.trim(),
+      drive_url: draft.drive_url.trim() ? normalizeLink(draft.drive_url) : "",
+      identity_files: draft.identity_files
+    };
+    setSaving(true);
     const { error } = await supabase.from("clients").update(patch).eq("id", client.id);
+    setSaving(false);
     if (error) {
       console.error(error);
       showToast("Não consegui salvar o perfil do cliente.");
       return;
     }
+    // arquivos tirados da lista durante a edição: apaga do armazenamento só depois de salvar
+    const kept = new Set(patch.identity_files.map((f) => f.path));
+    saved.identity_files.filter((f) => f.path && !kept.has(f.path)).forEach(removeFile);
+    uploadedNow.current = [];
     onSaved(patch);
-  }
-
-  function commit(key) {
-    let v = values[key].trim();
-    if (key === "drive_url" && v) {
-      v = normalizeLink(v);
-      setValues((s) => ({ ...s, drive_url: v }));
-    }
-    if (v !== (client[key] || "")) save({ [key]: v });
+    setEditing(false);
+    showToast("Perfil do cliente salvo.");
   }
 
   async function handleFile(e) {
@@ -192,10 +226,9 @@ export function ClientProfile({ client, showToast, onSaved }) {
     if (!file) return;
     setUploading(true);
     try {
-      const next = [...files, await uploadFile(`clients/${client.id}`, file)];
-      setFiles(next);
-      await save({ identity_files: next });
-      showToast("Arquivo adicionado à identidade visual.");
+      const att = await uploadFile(`clients/${client.id}`, file);
+      uploadedNow.current.push(att);
+      setDraft((d) => ({ ...d, identity_files: [...d.identity_files, att] }));
     } catch (err) {
       console.error(err);
       showToast("Não consegui subir o arquivo.");
@@ -204,43 +237,61 @@ export function ClientProfile({ client, showToast, onSaved }) {
     }
   }
 
-  function removeAt(idx) {
-    removeFile(files[idx]);
-    const next = files.filter((_, i) => i !== idx);
-    setFiles(next);
-    save({ identity_files: next });
-  }
+  const v = editing ? draft : saved;
 
   return (
     <section className="checklist-panel profile-panel">
       <div className="checklist-head">
         <h3>Perfil do cliente</h3>
-        <span className="hint">salva sozinho ao sair de cada campo</span>
+        {!editing ? (
+          <button className="btn btn-gold" onClick={startEdit}>
+            Editar
+          </button>
+        ) : (
+          <div className="profile-actions">
+            {changed && <span className="hint warn">alterações não salvas</span>}
+            <button className="btn btn-plain" onClick={cancel} disabled={saving}>
+              Cancelar
+            </button>
+            <button className="btn btn-gold" onClick={save} disabled={saving || uploading}>
+              {saving ? "Salvando…" : "Salvar alterações"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="profile-grid">
         {PROFILE_FIELDS.map((f) => (
           <div key={f.key} className={"profile-field" + (f.key === "notes" ? " wide" : "")}>
             <label htmlFor={"pf-" + f.key}>{f.label}</label>
-            <textarea
-              id={"pf-" + f.key}
-              rows={f.rows}
-              value={values[f.key]}
-              onChange={(e) => setValues((s) => ({ ...s, [f.key]: e.target.value }))}
-              onBlur={() => commit(f.key)}
-              placeholder={f.placeholder}
-            />
+            {editing ? (
+              <textarea
+                id={"pf-" + f.key}
+                rows={f.rows}
+                value={draft[f.key]}
+                onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                placeholder={f.placeholder}
+              />
+            ) : (
+              <div className={"profile-read" + (v[f.key] ? "" : " empty")}>{v[f.key] || "Não preenchido."}</div>
+            )}
             {f.key === "identity" && (
               <>
                 <div style={{ marginTop: 8 }}>
-                  <AttachmentList attachments={files} onRemove={removeAt} showToast={showToast} />
+                  <AttachmentList
+                    attachments={v.identity_files}
+                    showToast={showToast}
+                    onRemove={editing ? (idx) => setDraft((d) => ({ ...d, identity_files: d.identity_files.filter((_, i) => i !== idx) })) : undefined}
+                  />
                 </div>
-                <div className="attach-row" style={{ marginTop: 6 }}>
-                  <button className="file-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
-                    📎 {uploading ? "Enviando…" : "Logo, manual de marca, paleta…"}
-                  </button>
-                  <input type="file" ref={fileRef} hidden onChange={handleFile} />
-                </div>
+                {editing && (
+                  <div className="attach-row" style={{ marginTop: 6 }}>
+                    <button className="file-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
+                      📎 {uploading ? "Enviando…" : "Logo, manual de marca, paleta…"}
+                    </button>
+                    <input type="file" ref={fileRef} hidden onChange={handleFile} />
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -248,21 +299,21 @@ export function ClientProfile({ client, showToast, onSaved }) {
 
         <div className="profile-field wide">
           <label htmlFor="pf-drive">Link do Drive</label>
-          <div className="ref-add">
+          {editing ? (
             <input
               id="pf-drive"
               type="url"
-              value={values.drive_url}
-              onChange={(e) => setValues((s) => ({ ...s, drive_url: e.target.value }))}
-              onBlur={() => commit("drive_url")}
+              value={draft.drive_url}
+              onChange={(e) => setDraft((d) => ({ ...d, drive_url: e.target.value }))}
               placeholder="https://drive.google.com/drive/folders/…"
             />
-            {client.drive_url && (
-              <a className="btn btn-plain" href={client.drive_url} target="_blank" rel="noopener noreferrer">
-                Abrir pasta
-              </a>
-            )}
-          </div>
+          ) : v.drive_url ? (
+            <a className="btn btn-plain profile-drive" href={v.drive_url} target="_blank" rel="noopener noreferrer">
+              Abrir pasta do Drive ↗
+            </a>
+          ) : (
+            <div className="profile-read empty">Não preenchido.</div>
+          )}
         </div>
       </div>
       <div className="hint">

@@ -30,3 +30,8 @@
 .profile-field textarea { background: var(--surface-2); }
 .ref-add .btn { text-decoration: none; }
 .cal-agent { align-self: flex-start; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--cal-accent) 16%, transparent); color: var(--cal-accent); }
+.profile-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.profile-read { white-space: pre-wrap; font-size: 13.5px; line-height: 1.5; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; min-height: 42px; }
+.profile-read.empty { color: var(--text-faint); font-style: italic; }
+.profile-drive { text-decoration: none; }
+.hub-grid { max-width: 1000px; }

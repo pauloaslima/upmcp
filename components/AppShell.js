@@ -40,7 +40,8 @@ const SECTIONS = {
   staff: [
     { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os temas da semana viram peças na linha de produção com um clique." },
     { id: "calendario", title: "Calendário mensal", icon: "🗓️", text: "Temas do mês, com feriados, datas comemorativas e campanhas." },
-    { id: "producao", title: "Linha de produção", icon: "▦", text: "Todas as peças, da estruturação à publicação." }
+    { id: "producao", title: "Linha de produção", icon: "▦", text: "Todas as peças, da estruturação à publicação." },
+    { id: "perfil", title: "Perfil do cliente", icon: "🪪", text: "Posicionamento, identidade visual, observações e link do Drive." }
   ],
   cliente: [
     { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os posts planejados para esta semana." },
@@ -512,14 +513,6 @@ export default function AppShell({ session, profile }) {
                     ))}
                   </div>
                   {isStaff && (
-                    <ClientProfile
-                      key={"profile-" + current.id}
-                      client={current}
-                      showToast={showToast}
-                      onSaved={(values) => setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, ...values } : c)))}
-                    />
-                  )}
-                  {isStaff && (
                     <ClientChecklist
                       key={current.id}
                       client={current}
@@ -533,6 +526,17 @@ export default function AppShell({ session, profile }) {
                       <ClientTeam key={"team-" + current.id} client={current} team={team} isAdmin={isAdmin} showToast={showToast} onMembersChange={loadMembership} />
                     </div>
                   )}
+                </div>
+              )}
+
+              {view.section === "perfil" && isStaff && (
+                <div className="page-scroll">
+                  <ClientProfile
+                    key={"profile-" + current.id}
+                    client={current}
+                    showToast={showToast}
+                    onSaved={(values) => setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, ...values } : c)))}
+                  />
                 </div>
               )}
 
