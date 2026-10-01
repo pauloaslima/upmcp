@@ -90,12 +90,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
         client_id: client.id,
         assignee_id: client.responsible_id || null,
         // fotos e referências do tema viram anexos da peça; a identidade vai para "referência visual"
-        attachments: [
-          ...(entry.photos || []),
-          ...(entry.refs || []),
-          // artes geradas com IA (já montadas com o texto)
-          ...(entry.arts || []).filter((a) => a.arte?.path).map((a) => ({ type: "upload", path: a.arte.path, name: `Arte — ${a.pagina}.png` }))
-        ],
+        attachments: [...(entry.photos || []), ...(entry.refs || [])],
         visual_ref:
           entry.use_client_identity === false
             ? entry.identity_notes || ""
@@ -116,7 +111,6 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
       await supabase.from("card_comments").insert({ card_id: card.id, body: "Briefing para o design:\n\n" + briefDescription(entry, brief, client.identity) });
       if (brief.piece_text) await supabase.from("cards").update({ copy: brief.piece_text }).eq("id", card.id);
     }
-    if (entry.caption) await supabase.from("card_comments").insert({ card_id: card.id, body: "Legenda do post:\n\n" + entry.caption });
     await update(entry.id, { card_id: card.id });
     setCards((prev) => ({ ...prev, [card.id]: card }));
     return true;
@@ -213,7 +207,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                     );
                   })}
                   <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
-                    ✨ Chamar o especialista
+                    ✨ Criar temas com IA
                   </button>
                   <button className="btn btn-gold week-send-all" disabled={busy || pending === 0} onClick={() => sendWeek(days)}>
                     {pending ? `Criar ${pending} peça(s)` : "Tudo na produção"}

@@ -74,23 +74,16 @@ Content-Type: application/json
 
 ## Já pronto no sistema
 
-### Especialista do cliente (Conteúdo da semana e Calendário mensal)
+### Botão "✨ Criar temas com IA" (Conteúdo da semana)
 
-Cada cliente tem um **especialista**: o perfil do cliente mais o **segmento** (com as regras do segmento — ex.: psicologia segue o Código de Ética do CFP), o **idioma dos posts**, a região, o site, as redes, os concorrentes e os **aprendizados** (o que já foi confirmado com o cliente e as perguntas em aberto). Tudo fica em **Perfil do cliente → Especialista do cliente**.
+Em cada semana, a equipe clica, escreve orientações opcionais e escolhe quantos posts. Se o calendário mensal já tem temas nessa semana, o agente **desenvolve esses temas** (briefing, texto da peça) em vez de criar outros; só cria posts novos se pedirem mais do que os já planejados. Temas com briefing pronto ou enviado não são alterados.
+O servidor (`/api/content-agent`) chama o Claude (modelo `claude-opus-5-5`) com o perfil do cliente,
+as datas da semana e os temas recentes, e grava os temas com briefing. Precisa da variável
+`ANTHROPIC_API_KEY` no Vercel (chave criada em console.anthropic.com, com créditos).
 
-Botões:
-- **"✨ Chamar o especialista"** em cada semana do Conteúdo da semana;
-- **"✨ Criar calendário com IA"** no Calendário mensal (fontes: meses anteriores, texto ou áudio).
+### Botão "✨ Criar calendário com IA" (Calendário mensal)
 
-Ao chamar, o especialista:
-1. faz a **revisão antes de executar** (perfil incompleto, prazos vencidos, temas com briefing pronto/enviado, perguntas em aberto); se houver bloqueio, pede "Seguir assim";
-2. passa o trabalho pelo time, uma etapa por vez: **pesquisa na internet** (tendências e notícias, concorrentes e referências, site e redes do cliente — reaproveitada por 7 dias), **estrategista**, **redator** e **diretor de arte** juntos, **designer** (layout e pedidos de imagem) e **revisor** (confere as regras e devolve a versão final). No mês: pesquisa, estrategista e revisor;
-3. mostra a **proposta editável** (tema, texto da peça, legenda, briefing, layout, perguntas para o cliente). Nada é gravado sem a equipe clicar em **Gravar**;
-4. ao gravar, desenvolve os temas que já existiam (sem trocar dia nem assunto), cria os novos e manda as perguntas novas para as **Pendências** do perfil do cliente.
-
-Se a janela fechar no meio, a execução fica salva: ao abrir de novo, aparece **Retomar**.
-
-Rotas: `/api/agent-runs` (criar e retomar), `/api/agent-runs/<id>/step` (próxima etapa), `/api/agent-runs/<id>/approve` (gravar). Precisa de `ANTHROPIC_API_KEY` no Vercel (chave criada em console.anthropic.com, com créditos) e do SQL `supabase/008_especialistas.sql`.
+Monta os temas do mês inteiro com 3 fontes de estratégia: **meses anteriores** (o agente deduz a linha dos últimos 3 meses), **texto** (a equipe escreve a estratégia) ou **áudio** (ditado pelo navegador, Chrome/Edge, que vira texto para revisar). Os temas já existentes no mês ficam como estão. No calendário, os temas podem ser arrastados entre os dias.
 
 ### Conector para o app do Claude (MCP)
 
@@ -102,16 +95,3 @@ Depois é só pedir: *"crie o conteúdo da semana da 7ball"*. Ferramentas dispon
 
 O endereço contém a chave: trate-o como senha. Para trocar, mude `AGENT_API_KEY` no Vercel
 (isso também muda a chave do agente de design).
-
-### Artes com IA (modo híbrido)
-
-No editor de um tema **Estático, Carrossel ou Story**, o botão **"Abrir artes"** mostra uma página por tela/página do texto da peça. Reels e vídeo ficam só no roteiro.
-
-- A IA gera só a **imagem de fundo** (sem texto), a partir do pedido de imagem que o designer do time deixou no briefing.
-- O sistema escreve o **texto da peça** por cima com a **cor de destaque, as fontes e o logo** do perfil do cliente (Perfil do cliente → Artes com IA) e guarda o PNG final (1080×1350 no Feed, 1080×1920 no Story, com área segura).
-- Mudar o texto e clicar em **"Atualizar texto"** só remonta a arte (sem custo de IA). **"Nova imagem"** chama a IA de novo.
-- Geradores: **Nano Banana 2** e **Nano Banana Pro** (Google) e **GPT Image** (OpenAI). O padrão de cada cliente fica no perfil; dá para trocar na hora.
-- As fotos do tema podem ir como **referência** (produto ou ambiente real).
-- Quando o tema vira peça de produção, as artes prontas vão como anexo.
-
-Variáveis no Vercel: `GEMINI_API_KEY` (Google AI Studio) e `OPENAI_API_KEY` (platform.openai.com, com créditos). Opcionais, para trocar de modelo sem mexer no código: `NANO_BANANA_MODEL` (padrão `gemini-3.1-flash-image`), `NANO_BANANA_PRO_MODEL` (padrão `gemini-3-pro-image`), `OPENAI_IMAGE_MODEL` (padrão `gpt-image-2.5-flare`). SQL: `supabase/009_artes.sql`.

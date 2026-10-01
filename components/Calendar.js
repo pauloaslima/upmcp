@@ -5,8 +5,6 @@ import { MONTH_CAMPAIGNS, isoDate, specialDates } from "../lib/holidays";
 import { CALENDAR_FORMATS, formatStyle } from "../lib/pipeline";
 import { normalizeLink, removeFile, uploadFile } from "../lib/files";
 import { AttachmentList } from "./Board";
-import ArtsDialog from "./ArtsDialog";
-import { ART_FORMATS } from "../lib/arts";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -248,12 +246,10 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     photos: entry?.photos || [],
     refs: entry?.refs || [],
     use_client_identity: entry ? entry.use_client_identity !== false : true,
-    identity_notes: entry?.identity_notes || "",
-    caption: entry?.caption || ""
+    identity_notes: entry?.identity_notes || ""
   });
   const [brief, setBrief] = useState(() => briefWithDefaults(entry, day));
   const [briefStatus, setBriefStatus] = useState(entry?.brief_status || "rascunho");
-  const [artsOpen, setArtsOpen] = useState(false);
   const setB = (key) => ({ value: brief[key], onChange: (e) => setBrief((b) => ({ ...b, [key]: e.target.value })) });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -295,7 +291,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
 
   useEffect(() => {
     themeRef.current?.focus();
-    const onKey = (e) => e.key === "Escape" && !document.querySelector(".arts-layer") && closeRef.current(); // com as artes abertas, Esc não fecha o tema
+    const onKey = (e) => e.key === "Escape" && closeRef.current();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -344,7 +340,6 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
       refs: values.refs,
       use_client_identity: values.use_client_identity,
       identity_notes: values.use_client_identity ? "" : values.identity_notes.trim(),
-      ...(client ? { caption: values.caption.trim() } : {}),
       // salvar pela equipe = tema revisado (tira a marca "sugerido pelo agente")
       ...(client ? { brief, brief_status: briefStatus, created_by_agent: false } : {})
     });
@@ -579,28 +574,6 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="b-caption">✍️ Legenda do post</label>
-                  <textarea
-                    id="b-caption"
-                    rows={5}
-                    value={values.caption}
-                    onChange={(e) => setValues((v) => ({ ...v, caption: e.target.value }))}
-                    placeholder="Legenda com CTA e hashtags (vai junto com a peça)."
-                  />
-                </div>
-
-                {(entry?.pendencias || []).length > 0 && (
-                  <div className="spec-notes">
-                    <strong>Confirmar com o cliente</strong>
-                    <ul>
-                      {entry.pendencias.map((p) => (
-                        <li key={p}>{p}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
                 {briefStatus === "enviado" ? (
                   <div className="brief-sent">
                     Enviado ao design{entry?.brief_sent_at ? " em " + new Date(entry.brief_sent_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : ""}
@@ -633,26 +606,9 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                 <button type="button" className="btn btn-plain" onClick={copyBrief}>
                   Copiar briefing
                 </button>
-
-                {ART_FORMATS.includes(values.format) && (
-                  <div className="arts-open">
-                    <span>
-                      🎨 <strong>Artes com IA</strong>{" "}
-                      {(entry?.arts || []).length > 0 ? `· ${(entry.arts || []).filter((a) => a.arte).length} de ${entry.arts.length} página(s) prontas` : "· imagem pela IA, texto da peça com a identidade do cliente"}
-                    </span>
-                    {entry?.id ? (
-                      <button type="button" className="btn btn-plain" onClick={() => setArtsOpen(true)}>
-                        Abrir artes
-                      </button>
-                    ) : (
-                      <span className="hint">Salve o tema primeiro.</span>
-                    )}
-                  </div>
-                )}
               </section>
             </>
           )}
-          {artsOpen && <ArtsDialog entry={entry} client={client} onClose={() => setArtsOpen(false)} showToast={showToast} />}
 
           <div className="modal-footer">
             {onDelete ? (

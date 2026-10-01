@@ -1,109 +1,131 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { rangeLabel } from "../lib/deadlines";
-import { segmentOf } from "../lib/segments";
-import SpecialistRun, { agentFetch } from "./SpecialistRun";
 
-// "Especialista do cliente" no Conteúdo da semana: a equipe dá orientações opcionais e o time
-// de agentes (pesquisa, estrategista, redator, diretor de arte, designer, revisor) prepara os posts
-// da semana. A proposta aparece para revisar e só é gravada com o ok da equipe.
+// Janela do botão "Criar temas com IA": a equipe dá orientações opcionais e o agente
+// de conteúdo cria os temas da semana (com briefing), marcados para revisão.
 export default function AgentDialog({ client, weekStart, weekEnd, existingCount, onClose, onCreated, showToast }) {
   const [guidance, setGuidance] = useState("");
   const [count, setCount] = useState("");
-  const [fresh, setFresh] = useState(false);
-  const [run, setRun] = useState(null);
-  const [openRun, setOpenRun] = useState(null); // execução que ficou em aberto nesta semana
-  const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
   const [error, setError] = useState("");
-  const segment = segmentOf(client.segment);
+  const startedAt = useRef(0);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    agentFetch(`/api/agent-runs?client_id=${client.id}&mode=week&period_start=${weekStart}`)
-      .then((r) => setOpenRun(r.run))
-      .catch(() => {});
-  }, [client.id, weekStart]);
+    if (!busy) return;
+    const t = setInterval(() => setElapsed(Math.round((Date.now() - startedAt.current) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
 
-  async function start(e) {
+  async function run(e) {
     e.preventDefault();
-    setStarting(true);
+    setBusy(true);
     setError("");
+    startedAt.current = Date.now();
+    setElapsed(0);
     try {
-      const { run: created } = await agentFetch("/api/agent-runs", {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch("/api/content-agent", {
         method: "POST",
-        body: JSON.stringify({ mode: "week", client_id: client.id, week_start: weekStart, guidance, count: count ? Number(count) : null, nova_pesquisa: fresh })
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
+        body: JSON.stringify({ mode: "week", client_id: client.id, week_start: weekStart, guidance, count: count ? Number(count) : null })
       });
-      setRun(created);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(json.error || "Não consegui criar os temas agora.");
+        return;
+      }
+      const all = [...(json.atualizados || []), ...(json.criados || [])];
+      onCreated(all);
+      setResult({ ...json, todos: all });
+      showToast(`Agente: ${(json.atualizados || []).length} tema(s) desenvolvido(s), ${(json.criados || []).length} novo(s).`);
     } catch (err) {
-      setError(err.message);
+      console.error(err);
+      setError("Não consegui falar com o servidor. Confira a internet e tente de novo.");
     } finally {
-      setStarting(false);
+      setBusy(false);
     }
   }
 
-  const onBusy = useCallback((b) => setBusy(b), []);
-  const close = () => !busy && onClose();
-
   return (
-    <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && close()}>
-      <form className={"modal " + (run ? "modal-lg" : "modal-sm")} onSubmit={run ? (e) => e.preventDefault() : start}>
+    <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && !busy && onClose()}>
+      <form className="modal modal-sm" onSubmit={run}>
         <div className="modal-head">
           <div style={{ flex: 1 }}>
-            <h3 className="entry-title">✨ Especialista {client.name}</h3>
+            <h3 className="entry-title">✨ Criar temas com IA</h3>
             <div className="entry-date">
-              Posts de {rangeLabel(weekStart, weekEnd)}
-              {segment ? ` · ${segment.label}` : ""}
-              {client.language && client.language !== "pt-BR" ? ` · posts em ${client.language}` : ""}
+              {client.name} · posts de {rangeLabel(weekStart, weekEnd)}
             </div>
           </div>
-          <button type="button" className="icon-btn" title="Fechar" onClick={close} disabled={busy}>
+          <button type="button" className="icon-btn" title="Fechar" onClick={onClose} disabled={busy}>
             ✕
           </button>
         </div>
 
         <div className="modal-body">
-          {run ? (
-            <SpecialistRun initialRun={run} onSaved={onCreated} onClose={onClose} showToast={showToast} onBusy={onBusy} />
+          {result ? (
+            <>
+              <div className="agent-done">
+                <strong>
+                  {result.atualizados?.length ? `${result.atualizados.length} tema(s) do calendário desenvolvido(s)` : ""}
+                  {result.atualizados?.length && result.criados?.length ? " e " : ""}
+                  {result.criados?.length ? `${result.criados.length} tema(s) novo(s)` : ""}
+                </strong>
+                , marcados como “sugerido pelo agente”.
+                {result.resumo && <p>{result.resumo}</p>}
+              </div>
+              <ul className="agent-list">
+                {result.todos.map((t) => (
+                  <li key={t.id}>
+                    <span className="mono">{t.day.slice(8, 10)}/{t.day.slice(5, 7)}</span> {t.format && <strong>{t.format}</strong>} {t.theme}
+                  </li>
+                ))}
+              </ul>
+              <div className="hint">Revise cada tema: abra, ajuste o que precisar e salve. Ao salvar, a marca do agente sai.</div>
+              <div className="modal-footer">
+                <span></span>
+                <button type="button" className="btn btn-gold" onClick={onClose}>
+                  Revisar os temas
+                </button>
+              </div>
+            </>
           ) : (
             <>
               <p className="agent-intro">
-                O especialista lê o <strong>perfil do cliente</strong>, o segmento e suas regras, o que já foi confirmado com o cliente, as datas
-                da semana e os temas recentes, <strong>pesquisa na internet</strong> e passa o trabalho pelo time: estrategista, redator, diretor
-                de arte, designer e revisor. Você revisa a proposta antes de gravar.
+                O agente lê o <strong>perfil do cliente</strong> (posicionamento, identidade visual, observações), as datas comemorativas da
+                semana e os temas recentes, e cria os posts com o briefing para o design.
               </p>
-              {openRun && (
-                <div className="agent-plan">
-                  Há uma execução {openRun.status === "aguardando_aprovacao" ? "com proposta pronta" : "em andamento"} desta semana, de{" "}
-                  {new Date(openRun.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.{" "}
-                  <button type="button" className="link-btn inline" onClick={() => setRun(openRun)}>
-                    Retomar
-                  </button>
-                </div>
-              )}
               {existingCount > 0 ? (
                 <div className="agent-plan">
-                  O calendário já tem <strong>{existingCount} tema(s)</strong> nesta semana. O time vai <strong>desenvolver esses temas</strong> e só
-                  cria posts novos se você pedir mais do que {existingCount}. Temas com briefing pronto ou enviado ao design não são alterados.
+                  O calendário mensal já tem <strong>{existingCount} tema(s)</strong> nesta semana. O agente vai <strong>desenvolver esses temas</strong>{" "}
+                  (briefing e texto da peça) e só cria posts novos se você pedir mais do que {existingCount}. Temas com briefing pronto ou
+                  enviado ao design não são alterados.
                 </div>
               ) : (
-                <div className="hint">O calendário não tem temas nesta semana: o time cria os posts do zero.</div>
+                <div className="hint">O calendário mensal não tem temas nesta semana: o agente cria os posts do zero.</div>
+              )}
+              {!client.positioning && !client.identity && (
+                <div className="hint warn">O perfil deste cliente está vazio — preencha em “Perfil do cliente” para temas mais certeiros.</div>
               )}
 
               <div>
-                <label htmlFor="ag-guidance">Orientações para o time (opcional)</label>
+                <label htmlFor="ag-guidance">Orientações para o agente (opcional)</label>
                 <textarea
                   id="ag-guidance"
                   rows={4}
                   value={guidance}
                   onChange={(e) => setGuidance(e.target.value)}
                   placeholder="Ex.: foco na promoção de Black Friday; um Reels de bastidores; evitar falar de preço."
-                  disabled={starting}
+                  disabled={busy}
                 />
               </div>
               <div>
                 <label htmlFor="ag-count">Quantos posts</label>
-                <select id="ag-count" value={count} onChange={(e) => setCount(e.target.value)} disabled={starting}>
+                <select id="ag-count" value={count} onChange={(e) => setCount(e.target.value)} disabled={busy}>
                   <option value="">{existingCount > 0 ? `Automático (só os ${existingCount} do calendário)` : "Automático (frequência habitual do cliente)"}</option>
                   {[1, 2, 3, 4, 5, 6, 7].map((n) => (
                     <option key={n} value={n}>
@@ -112,20 +134,20 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
                   ))}
                 </select>
               </div>
-              <label className="spec-check">
-                <input type="checkbox" checked={fresh} onChange={(e) => setFresh(e.target.checked)} disabled={starting} />
-                Pesquisar de novo na internet (senão, reaproveita a pesquisa dos últimos 7 dias, se houver)
-              </label>
 
               {error && <div className="login-msg error">{error}</div>}
-              <div className="hint">Leva de 3 a 8 minutos. Custo aproximado: US$ 0,40 a 1,00 por semana.</div>
+              {busy && (
+                <div className="agent-wait">
+                  <span className="spinner" aria-hidden="true"></span> Criando os temas… {elapsed}s <span className="hint">(costuma levar de 30s a 2 min)</span>
+                </div>
+              )}
 
               <div className="modal-footer">
-                <button type="button" className="btn btn-plain" onClick={onClose} disabled={starting}>
+                <button type="button" className="btn btn-plain" onClick={onClose} disabled={busy}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-gold" disabled={starting}>
-                  {starting ? "Revisando…" : "Chamar o especialista"}
+                <button type="submit" className="btn btn-gold" disabled={busy}>
+                  {busy ? "Criando…" : "Criar temas"}
                 </button>
               </div>
             </>

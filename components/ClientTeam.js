@@ -4,9 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeLink, uploadFile, removeFile } from "../lib/files";
 import { AttachmentList } from "./Board";
-import { IMAGE_PROVIDERS, LANGUAGES, SEGMENTS, normalizeLearnings } from "../lib/segments";
-import { FONT_CHOICES } from "../lib/arts";
-import { todayInBrazil } from "../lib/deadlines";
 
 // Equipe do cliente: funcionários ligados a ele (com a função de cada um) e os logins do próprio cliente.
 export function ClientTeam({ client, team, isAdmin, showToast, onMembersChange }) {
@@ -152,27 +149,6 @@ const PROFILE_FIELDS = [
   }
 ];
 
-// Campos do especialista do cliente (time de agentes)
-const SPECIALIST_KEYS = ["segment", "language", "region", "website", "social_links", "competitors", "image_provider", "brand_colors", "title_font", "body_font"];
-const TEXT_KEYS = ["positioning", "identity", "notes", "drive_url", ...SPECIALIST_KEYS];
-const FILE_KEYS = ["identity_files", "brand_logo", "font_file"]; // brand_logo e font_file: um arquivo só
-const fontOptions = FONT_CHOICES.map((f) => ({ id: f, label: f }));
-// Identidade usada para montar as artes geradas com IA
-const ART_FIELDS = [
-  { key: "brand_colors", label: "Cores da marca (códigos)", placeholder: "Ex.: #1B2A4A, #C9A227 — a primeira é a cor de destaque" },
-  { key: "title_font", label: "Fonte dos títulos", options: fontOptions },
-  { key: "body_font", label: "Fonte dos textos", options: fontOptions }
-];
-const SPECIALIST_FIELDS = [
-  { key: "segment", label: "Segmento", options: [{ id: "", label: "Não definido" }, ...SEGMENTS.map((s) => ({ id: s.id, label: s.label }))] },
-  { key: "language", label: "Idioma dos posts", options: LANGUAGES },
-  { key: "region", label: "Cidade / região de atuação", placeholder: "Ex.: Vitória (ES) e Grande Vitória" },
-  { key: "image_provider", label: "Gerador de imagens padrão", options: IMAGE_PROVIDERS },
-  { key: "website", label: "Site", placeholder: "https://…" },
-  { key: "social_links", label: "Redes sociais", placeholder: "@perfil no Instagram, LinkedIn, TikTok…" },
-  { key: "competitors", label: "Concorrentes e referências", rows: 3, wide: true, placeholder: "Perfis ou marcas que o especialista deve acompanhar (um por linha)" }
-];
-
 // Abre só para leitura. Para mudar: "Editar" → alterar → "Salvar alterações" (pede confirmação).
 // "Cancelar" descarta tudo, inclusive arquivos enviados durante a edição.
 export function ClientProfile({ client, showToast, onSaved }) {
@@ -181,19 +157,7 @@ export function ClientProfile({ client, showToast, onSaved }) {
     identity: client.identity || "",
     notes: client.notes || "",
     drive_url: client.drive_url || "",
-    identity_files: client.identity_files || [],
-    segment: client.segment || "",
-    language: client.language || "pt-BR",
-    region: client.region || "",
-    website: client.website || "",
-    social_links: client.social_links || "",
-    competitors: client.competitors || "",
-    image_provider: client.image_provider || "nano_banana",
-    brand_colors: client.brand_colors || "",
-    title_font: client.title_font || "Montserrat",
-    body_font: client.body_font || "Inter",
-    brand_logo: client.brand_logo || [],
-    font_file: client.font_file || []
+    identity_files: client.identity_files || []
   });
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fromClient);
@@ -201,18 +165,16 @@ export function ClientProfile({ client, showToast, onSaved }) {
   const [saving, setSaving] = useState(false);
   const uploadedNow = useRef([]); // arquivos enviados nesta edição
   const fileRef = useRef(null);
-  const logoRef = useRef(null);
-  const fontRef = useRef(null);
 
   useEffect(() => {
     if (!editing) setDraft(fromClient());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, editing]);
+  }, [client.id, client.positioning, client.identity, client.notes, client.drive_url, client.identity_files, editing]);
 
   const saved = fromClient();
   const changed =
-    TEXT_KEYS.some((k) => draft[k].trim() !== saved[k]) ||
-    FILE_KEYS.some((k) => draft[k].map((f) => f.path || f.url).join("|") !== saved[k].map((f) => f.path || f.url).join("|"));
+    ["positioning", "identity", "notes", "drive_url"].some((k) => draft[k].trim() !== saved[k]) ||
+    draft.identity_files.map((f) => f.path || f.url).join("|") !== saved.identity_files.map((f) => f.path || f.url).join("|");
 
   function startEdit() {
     uploadedNow.current = [];
@@ -239,10 +201,7 @@ export function ClientProfile({ client, showToast, onSaved }) {
       identity: draft.identity.trim(),
       notes: draft.notes.trim(),
       drive_url: draft.drive_url.trim() ? normalizeLink(draft.drive_url) : "",
-      identity_files: draft.identity_files,
-      brand_logo: draft.brand_logo,
-      font_file: draft.font_file,
-      ...Object.fromEntries(SPECIALIST_KEYS.map((k) => [k, draft[k].trim()]))
+      identity_files: draft.identity_files
     };
     setSaving(true);
     const { error } = await supabase.from("clients").update(patch).eq("id", client.id);
@@ -253,31 +212,23 @@ export function ClientProfile({ client, showToast, onSaved }) {
       return;
     }
     // arquivos tirados da lista durante a edição: apaga do armazenamento só depois de salvar
-    const kept = new Set(FILE_KEYS.flatMap((k) => patch[k].map((f) => f.path)));
-    FILE_KEYS.flatMap((k) => saved[k]).filter((f) => f.path && !kept.has(f.path)).forEach(removeFile);
+    const kept = new Set(patch.identity_files.map((f) => f.path));
+    saved.identity_files.filter((f) => f.path && !kept.has(f.path)).forEach(removeFile);
     uploadedNow.current = [];
     onSaved(patch);
     setEditing(false);
     showToast("Perfil do cliente salvo.");
   }
 
-  async function handleFile(e, key = "identity_files") {
+  async function handleFile(e) {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    if (key === "font_file" && !/\.(ttf|otf|woff)$/i.test(file.name)) {
-      showToast("Use uma fonte .ttf, .otf ou .woff.");
-      return;
-    }
-    if (key === "brand_logo" && !/\.(png|jpe?g|webp|svg)$/i.test(file.name)) {
-      showToast("Use o logo em PNG (de preferência com fundo transparente).");
-      return;
-    }
     setUploading(true);
     try {
       const att = await uploadFile(`clients/${client.id}`, file);
       uploadedNow.current.push(att);
-      setDraft((d) => ({ ...d, [key]: key === "identity_files" ? [...d.identity_files, att] : [att] }));
+      setDraft((d) => ({ ...d, identity_files: [...d.identity_files, att] }));
     } catch (err) {
       console.error(err);
       showToast("Não consegui subir o arquivo.");
@@ -365,175 +316,10 @@ export function ClientProfile({ client, showToast, onSaved }) {
           )}
         </div>
       </div>
-      <h4 className="profile-sub">Especialista do cliente</h4>
-      <div className="profile-grid">
-        {SPECIALIST_FIELDS.map((f) => {
-          const label = f.options ? (f.options.find((o) => o.id === v[f.key]) || f.options[0]).label : v[f.key];
-          return (
-            <div key={f.key} className={"profile-field" + (f.wide ? " wide" : "")}>
-              <label htmlFor={"pf-" + f.key}>{f.label}</label>
-              {!editing ? (
-                <div className={"profile-read" + (label ? "" : " empty")}>{label || "Não preenchido."}</div>
-              ) : f.options ? (
-                <select id={"pf-" + f.key} value={draft[f.key]} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}>
-                  {f.options.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              ) : f.rows ? (
-                <textarea id={"pf-" + f.key} rows={f.rows} value={draft[f.key]} placeholder={f.placeholder} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))} />
-              ) : (
-                <input type="text" id={"pf-" + f.key} value={draft[f.key]} placeholder={f.placeholder} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <h4 className="profile-sub">Artes com IA</h4>
-      <div className="profile-grid">
-        {ART_FIELDS.map((f) => (
-          <div key={f.key} className={"profile-field" + (f.key === "brand_colors" ? " wide" : "")}>
-            <label htmlFor={"pf-" + f.key}>{f.label}</label>
-            {!editing ? (
-              <div className={"profile-read" + (v[f.key] ? "" : " empty")}>{v[f.key] || "Não preenchido."}</div>
-            ) : f.options ? (
-              <select id={"pf-" + f.key} value={draft[f.key]} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}>
-                {f.options.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input type="text" id={"pf-" + f.key} value={draft[f.key]} placeholder={f.placeholder} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))} />
-            )}
-          </div>
-        ))}
-        {[
-          { key: "brand_logo", label: "Logo para as artes", hint: "PNG com fundo transparente", ref: logoRef, accept: ".png,.jpg,.jpeg,.webp,.svg" },
-          { key: "font_file", label: "Fonte própria dos títulos (opcional)", hint: "arquivo .ttf ou .otf; substitui a fonte dos títulos", ref: fontRef, accept: ".ttf,.otf,.woff" }
-        ].map((f) => (
-          <div key={f.key} className="profile-field">
-            <label>{f.label}</label>
-            <AttachmentList
-              attachments={v[f.key]}
-              showToast={showToast}
-              onRemove={editing ? () => setDraft((d) => ({ ...d, [f.key]: [] })) : undefined}
-            />
-            {!v[f.key].length && !editing && <div className="profile-read empty">Não enviado.</div>}
-            {editing && (
-              <div className="attach-row" style={{ marginTop: 6 }}>
-                <button className="file-btn" disabled={uploading} onClick={() => f.ref.current?.click()}>
-                  📎 {uploading ? "Enviando…" : v[f.key].length ? "Trocar arquivo" : f.hint}
-                </button>
-                <input type="file" ref={f.ref} hidden accept={f.accept} onChange={(e) => handleFile(e, f.key)} />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
       <div className="hint">
-        Nos temas do Conteúdo da semana, “Usar a identidade do cliente” puxa a identidade visual daqui. O especialista do cliente e o time
-        de agentes consultam este perfil, seguem as regras do segmento e pesquisam o site, as redes e os concorrentes.
+        Nos temas do Conteúdo da semana, “Usar a identidade do cliente” puxa a identidade visual daqui. Os agentes de conteúdo e de
+        design também consultam este perfil.
       </div>
-      <ClientLearnings client={client} showToast={showToast} onSaved={onSaved} />
     </section>
   );
 }
-
-// O que o especialista já sabe do cliente (Confirmado) e as perguntas em aberto (Pendências).
-// "Respondida" pede a resposta do cliente e move a pergunta para Confirmado.
-function ClientLearnings({ client, showToast, onSaved }) {
-  const learnings = normalizeLearnings(client.learnings);
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function persist(next, message) {
-    setBusy(true);
-    const { error } = await supabase.from("clients").update({ learnings: next }).eq("id", client.id);
-    setBusy(false);
-    if (error) {
-      console.error(error);
-      showToast("Não consegui salvar.");
-      return false;
-    }
-    onSaved({ learnings: next });
-    showToast(message);
-    return true;
-  }
-
-  function answer(i) {
-    const p = learnings.pendencias[i];
-    const resposta = prompt(`Resposta do cliente para:\n\n${p.texto}`);
-    if (resposta === null || !resposta.trim()) return;
-    persist(
-      {
-        confirmado: [...learnings.confirmado, { texto: `${p.texto} → ${resposta.trim()}`, data: todayInBrazil() }],
-        pendencias: learnings.pendencias.filter((_, j) => j !== i)
-      },
-      "Resposta registrada. O especialista passa a usar essa informação."
-    );
-  }
-
-  function drop(kind, i) {
-    if (!confirm("Remover este item?")) return;
-    persist({ ...learnings, [kind]: learnings[kind].filter((_, j) => j !== i) }, "Removido.");
-  }
-
-  async function add(e) {
-    e.preventDefault();
-    const t = text.trim();
-    if (!t) return;
-    if (await persist({ ...learnings, confirmado: [...learnings.confirmado, { texto: t, data: todayInBrazil() }] }, "Informação confirmada adicionada.")) setText("");
-  }
-
-  const fmt = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "");
-
-  return (
-    <div className="learn">
-      <h4 className="profile-sub">Pendências com o cliente ({learnings.pendencias.length})</h4>
-      {learnings.pendencias.length === 0 ? (
-        <div className="hint">Nenhuma pergunta em aberto.</div>
-      ) : (
-        <ul className="learn-list">
-          {learnings.pendencias.map((p, i) => (
-            <li key={i}>
-              <span>{p.texto}</span>
-              <span className="hint">{fmt(p.data)}</span>
-              <button className="btn btn-plain" onClick={() => answer(i)} disabled={busy}>
-                Respondida
-              </button>
-              <button className="icon-btn" title="Remover" onClick={() => drop("pendencias", i)} disabled={busy}>
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h4 className="profile-sub">O que já foi confirmado ({learnings.confirmado.length})</h4>
-      {learnings.confirmado.length > 0 && (
-        <ul className="learn-list">
-          {learnings.confirmado.map((p, i) => (
-            <li key={i}>
-              <span>{p.texto}</span>
-              <span className="hint">{fmt(p.data)}</span>
-              <button className="icon-btn" title="Remover" onClick={() => drop("confirmado", i)} disabled={busy}>
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form className="learn-add" onSubmit={add}>
-        <input type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ex.: O cliente prefere “sinuca” em vez de “bilhar”." disabled={busy} />
-        <button className="btn btn-plain" disabled={busy || !text.trim()}>
-          Adicionar confirmado
-        </button>
-      </form>
-    </div>
-  );
-}
-
