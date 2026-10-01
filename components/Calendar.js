@@ -72,7 +72,8 @@ export function EntryChip({ entry, onClick, dragProps }) {
 }
 
 // onMove(entry, novoDia): arrastar um tema para outro dia. onAi: abre o "Criar calendário com IA".
-export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi }) {
+// onClear: abre o "Limpar mês".
+export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi, onClear }) {
   const [editing, setEditing] = useState(null); // { day } para novo, { entry } para existente
   const [dragging, setDragging] = useState(null); // tema sendo arrastado
   const [dropDay, setDropDay] = useState(null);
@@ -98,11 +99,16 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
 
   return (
     <div className="cal">
-      {!readOnly && (onAi || onMove) && (
+      {!readOnly && (onAi || onMove || onClear) && (
         <div className="cal-toolbar">
           {onAi && (
             <button className="btn btn-gold" onClick={onAi}>
               ✨ Criar calendário com IA
+            </button>
+          )}
+          {onClear && (
+            <button className="btn btn-plain danger" onClick={onClear} disabled={!entries.length} title={entries.length ? "" : "Não há temas neste mês"}>
+              🗑 Limpar mês
             </button>
           )}
           {onMove && <span className="hint">Arraste os temas entre os dias para remanejar o mês.</span>}

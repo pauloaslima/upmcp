@@ -10,6 +10,7 @@ import { useClientTasks } from "../lib/useClientTasks";
 import { briefDescription, briefWithDefaults } from "../lib/brief";
 import { EntryChip, EntryEditor, MONTHS, SpecialDates, WEEKDAYS } from "./Calendar";
 import AgentDialog from "./AgentDialog";
+import ClearDialog from "./ClearDialog";
 
 const STEP_SHORT = { design: "Design", ajustes: "Ajustes", aprovacao: "Aprovação" };
 
@@ -38,11 +39,12 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
   const inMonth = (d) => !isStaff || (d.getFullYear() === ym.year && d.getMonth() + 1 === ym.month);
   const first = iso(weeks[0][0]);
   const last = iso(weeks[weeks.length - 1][6]);
-  const { entries, create, update, remove, addLocal } = useCalendarEntries(client.id, first, last, showToast);
+  const { entries, create, update, remove, removeMany, addLocal } = useCalendarEntries(client.id, first, last, showToast);
   const tasks = useClientTasks(isStaff ? client.id : false, iso(addDays(parse(first), -1)), showToast);
   const [cards, setCards] = useState({});
   const [editing, setEditing] = useState(null);
   const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Criar temas com IA"
+  const [clearWeek, setClearWeek] = useState(null); // semana aberta no "Limpar semana"
   const [busy, setBusy] = useState(false);
 
   // situação das peças já criadas a partir dos temas (só a equipe enxerga)
@@ -209,6 +211,14 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                   <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
                     ✨ Criar temas com IA
                   </button>
+                  <button
+                    className="btn btn-plain danger week-clear"
+                    disabled={!weekEntries.length}
+                    title={weekEntries.length ? "" : "Não há temas nesta semana"}
+                    onClick={() => setClearWeek({ start: pubIso, end: iso(days[6]) })}
+                  >
+                    🗑 Limpar semana
+                  </button>
                   <button className="btn btn-gold week-send-all" disabled={busy || pending === 0} onClick={() => sendWeek(days)}>
                     {pending ? `Criar ${pending} peça(s)` : "Tudo na produção"}
                   </button>
@@ -262,6 +272,16 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
           </section>
         );
       })}
+
+      {clearWeek && (
+        <ClearDialog
+          title="Limpar semana"
+          scope={`${client.name} · posts de ${rangeLabel(clearWeek.start, clearWeek.end)}`}
+          entries={entries.filter((e) => e.day >= clearWeek.start && e.day <= clearWeek.end)}
+          onClose={() => setClearWeek(null)}
+          onConfirm={removeMany}
+        />
+      )}
 
       {agentWeek && (
         <AgentDialog

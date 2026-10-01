@@ -8,6 +8,7 @@ import "./briefing.css";
 import "./agente.css";
 import "./calendario-ia.css";
 import "./perfil.css";
+import "./limpar.css";
 import "./alinhamento.css";
 
 export const metadata = {
