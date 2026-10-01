@@ -246,7 +246,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     photos: entry?.photos || [],
     refs: entry?.refs || [],
     use_client_identity: entry ? entry.use_client_identity !== false : true,
-    identity_notes: entry?.identity_notes || ""
+    identity_notes: entry?.identity_notes || "",
+    caption: entry?.caption || ""
   });
   const [brief, setBrief] = useState(() => briefWithDefaults(entry, day));
   const [briefStatus, setBriefStatus] = useState(entry?.brief_status || "rascunho");
@@ -340,6 +341,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
       refs: values.refs,
       use_client_identity: values.use_client_identity,
       identity_notes: values.use_client_identity ? "" : values.identity_notes.trim(),
+      ...(client ? { caption: values.caption.trim() } : {}),
       // salvar pela equipe = tema revisado (tira a marca "sugerido pelo agente")
       ...(client ? { brief, brief_status: briefStatus, created_by_agent: false } : {})
     });
@@ -573,6 +575,28 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                     placeholder={"Texto que vai na arte. Carrossel: separe por página.\nPágina 1: …\nPágina 2: …"}
                   />
                 </div>
+
+                <div>
+                  <label htmlFor="b-caption">✍️ Legenda do post</label>
+                  <textarea
+                    id="b-caption"
+                    rows={5}
+                    value={values.caption}
+                    onChange={(e) => setValues((v) => ({ ...v, caption: e.target.value }))}
+                    placeholder="Legenda com CTA e hashtags (vai junto com a peça)."
+                  />
+                </div>
+
+                {(entry?.pendencias || []).length > 0 && (
+                  <div className="spec-notes">
+                    <strong>Confirmar com o cliente</strong>
+                    <ul>
+                      {entry.pendencias.map((p) => (
+                        <li key={p}>{p}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {briefStatus === "enviado" ? (
                   <div className="brief-sent">

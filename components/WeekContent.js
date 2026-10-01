@@ -111,6 +111,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
       await supabase.from("card_comments").insert({ card_id: card.id, body: "Briefing para o design:\n\n" + briefDescription(entry, brief, client.identity) });
       if (brief.piece_text) await supabase.from("cards").update({ copy: brief.piece_text }).eq("id", card.id);
     }
+    if (entry.caption) await supabase.from("card_comments").insert({ card_id: card.id, body: "Legenda do post:\n\n" + entry.caption });
     await update(entry.id, { card_id: card.id });
     setCards((prev) => ({ ...prev, [card.id]: card }));
     return true;
@@ -207,7 +208,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                     );
                   })}
                   <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
-                    ✨ Criar temas com IA
+                    ✨ Chamar o especialista
                   </button>
                   <button className="btn btn-gold week-send-all" disabled={busy || pending === 0} onClick={() => sendWeek(days)}>
                     {pending ? `Criar ${pending} peça(s)` : "Tudo na produção"}

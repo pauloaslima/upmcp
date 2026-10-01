@@ -32,3 +32,7 @@
 .task { align-items: start; }
 .task input[type=checkbox] { align-self: start; margin-top: 2px; }
 .task-due { align-self: start; margin-top: 2px; }
+
+/* perfil do cliente: duas colunas fixas (campos largos ocupam a linha toda), uma no celular */
+.profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 700px) { .profile-grid { grid-template-columns: 1fr; } }
