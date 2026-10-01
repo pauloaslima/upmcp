@@ -102,3 +102,16 @@ Depois é só pedir: *"crie o conteúdo da semana da 7ball"*. Ferramentas dispon
 
 O endereço contém a chave: trate-o como senha. Para trocar, mude `AGENT_API_KEY` no Vercel
 (isso também muda a chave do agente de design).
+
+### Artes com IA (modo híbrido)
+
+No editor de um tema **Estático, Carrossel ou Story**, o botão **"Abrir artes"** mostra uma página por tela/página do texto da peça. Reels e vídeo ficam só no roteiro.
+
+- A IA gera só a **imagem de fundo** (sem texto), a partir do pedido de imagem que o designer do time deixou no briefing.
+- O sistema escreve o **texto da peça** por cima com a **cor de destaque, as fontes e o logo** do perfil do cliente (Perfil do cliente → Artes com IA) e guarda o PNG final (1080×1350 no Feed, 1080×1920 no Story, com área segura).
+- Mudar o texto e clicar em **"Atualizar texto"** só remonta a arte (sem custo de IA). **"Nova imagem"** chama a IA de novo.
+- Geradores: **Nano Banana 2** e **Nano Banana Pro** (Google) e **GPT Image** (OpenAI). O padrão de cada cliente fica no perfil; dá para trocar na hora.
+- As fotos do tema podem ir como **referência** (produto ou ambiente real).
+- Quando o tema vira peça de produção, as artes prontas vão como anexo.
+
+Variáveis no Vercel: `GEMINI_API_KEY` (Google AI Studio) e `OPENAI_API_KEY` (platform.openai.com, com créditos). Opcionais, para trocar de modelo sem mexer no código: `NANO_BANANA_MODEL` (padrão `gemini-3.1-flash-image`), `NANO_BANANA_PRO_MODEL` (padrão `gemini-3-pro-image`), `OPENAI_IMAGE_MODEL` (padrão `gpt-image-2.5-flare`). SQL: `supabase/009_artes.sql`.

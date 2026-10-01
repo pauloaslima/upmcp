@@ -5,6 +5,8 @@ import { MONTH_CAMPAIGNS, isoDate, specialDates } from "../lib/holidays";
 import { CALENDAR_FORMATS, formatStyle } from "../lib/pipeline";
 import { normalizeLink, removeFile, uploadFile } from "../lib/files";
 import { AttachmentList } from "./Board";
+import ArtsDialog from "./ArtsDialog";
+import { ART_FORMATS } from "../lib/arts";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -251,6 +253,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
   });
   const [brief, setBrief] = useState(() => briefWithDefaults(entry, day));
   const [briefStatus, setBriefStatus] = useState(entry?.brief_status || "rascunho");
+  const [artsOpen, setArtsOpen] = useState(false);
   const setB = (key) => ({ value: brief[key], onChange: (e) => setBrief((b) => ({ ...b, [key]: e.target.value })) });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -292,7 +295,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
 
   useEffect(() => {
     themeRef.current?.focus();
-    const onKey = (e) => e.key === "Escape" && closeRef.current();
+    const onKey = (e) => e.key === "Escape" && !document.querySelector(".arts-layer") && closeRef.current(); // com as artes abertas, Esc não fecha o tema
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -630,9 +633,26 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                 <button type="button" className="btn btn-plain" onClick={copyBrief}>
                   Copiar briefing
                 </button>
+
+                {ART_FORMATS.includes(values.format) && (
+                  <div className="arts-open">
+                    <span>
+                      🎨 <strong>Artes com IA</strong>{" "}
+                      {(entry?.arts || []).length > 0 ? `· ${(entry.arts || []).filter((a) => a.arte).length} de ${entry.arts.length} página(s) prontas` : "· imagem pela IA, texto da peça com a identidade do cliente"}
+                    </span>
+                    {entry?.id ? (
+                      <button type="button" className="btn btn-plain" onClick={() => setArtsOpen(true)}>
+                        Abrir artes
+                      </button>
+                    ) : (
+                      <span className="hint">Salve o tema primeiro.</span>
+                    )}
+                  </div>
+                )}
               </section>
             </>
           )}
+          {artsOpen && <ArtsDialog entry={entry} client={client} onClose={() => setArtsOpen(false)} showToast={showToast} />}
 
           <div className="modal-footer">
             {onDelete ? (

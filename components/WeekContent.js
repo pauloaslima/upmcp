@@ -90,7 +90,12 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
         client_id: client.id,
         assignee_id: client.responsible_id || null,
         // fotos e referências do tema viram anexos da peça; a identidade vai para "referência visual"
-        attachments: [...(entry.photos || []), ...(entry.refs || [])],
+        attachments: [
+          ...(entry.photos || []),
+          ...(entry.refs || []),
+          // artes geradas com IA (já montadas com o texto)
+          ...(entry.arts || []).filter((a) => a.arte?.path).map((a) => ({ type: "upload", path: a.arte.path, name: `Arte — ${a.pagina}.png` }))
+        ],
         visual_ref:
           entry.use_client_identity === false
             ? entry.identity_notes || ""
