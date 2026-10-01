@@ -36,10 +36,10 @@ export function SpecialDates({ list }) {
 }
 
 // Um tema no calendário. Sem onClick, fica só para leitura (visão do cliente).
-export function EntryChip({ entry, onClick }) {
+export function EntryChip({ entry, onClick, dragProps }) {
   const Tag = onClick ? "button" : "div";
   return (
-    <Tag className={"cal-entry" + (onClick ? "" : " readonly")} onClick={onClick || undefined}>
+    <Tag className={"cal-entry" + (onClick ? "" : " readonly") + (dragProps ? " draggable" : "")} onClick={onClick || undefined} {...(dragProps || {})}>
       {(entry.format || entry.post_time) && (
         <span className="cal-entry-top">
           {entry.format && (
@@ -70,8 +70,12 @@ export function EntryChip({ entry, onClick }) {
   );
 }
 
-export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete }) {
+// onMove(entry, novoDia): arrastar um tema para outro dia. onAi: abre o "Criar calendário com IA".
+export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi }) {
   const [editing, setEditing] = useState(null); // { day } para novo, { entry } para existente
+  const [dragging, setDragging] = useState(null); // tema sendo arrastado
+  const [dropDay, setDropDay] = useState(null);
+  const canDrag = !readOnly && !!onMove;
   const today = isoDate(new Date());
   const special = specialDates(year);
   const cells = useMemo(() => monthGrid(year, month), [year, month]);
@@ -93,6 +97,16 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
 
   return (
     <div className="cal">
+      {!readOnly && (onAi || onMove) && (
+        <div className="cal-toolbar">
+          {onAi && (
+            <button className="btn btn-gold" onClick={onAi}>
+              ✨ Criar calendário com IA
+            </button>
+          )}
+          {onMove && <span className="hint">Arraste os temas entre os dias para remanejar o mês.</span>}
+        </div>
+      )}
       <div className="cal-head">
         <button className="cal-nav" onClick={onPrev} aria-label="Mês anterior">‹</button>
         <h2 className="cal-title">
@@ -130,9 +144,30 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
             <div
               key={key}
               className={
-                "cal-cell" + (key === today ? " cal-today-cell" : "") + (isHoliday ? " cal-holiday" : "")
+                "cal-cell" + (key === today ? " cal-today-cell" : "") + (isHoliday ? " cal-holiday" : "") + (dropDay === key ? " drop-target" : "")
               }
               style={readOnly ? { cursor: "default" } : undefined}
+              onDragOver={
+                canDrag && dragging
+                  ? (e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      if (dropDay !== key) setDropDay(key);
+                    }
+                  : undefined
+              }
+              onDragLeave={canDrag ? (e) => !e.currentTarget.contains(e.relatedTarget) && setDropDay(null) : undefined}
+              onDrop={
+                canDrag
+                  ? (e) => {
+                      e.preventDefault();
+                      const moved = dragging;
+                      setDragging(null);
+                      setDropDay(null);
+                      if (moved && moved.day !== key) onMove(moved, key);
+                    }
+                  : undefined
+              }
               onClick={(e) => {
                 if (!readOnly && e.target === e.currentTarget) setEditing({ day: key });
               }}
@@ -148,7 +183,28 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
               </div>
               <SpecialDates list={specials} />
               {list.map((entry) => (
-                <EntryChip key={entry.id} entry={entry} onClick={readOnly ? null : () => setEditing({ entry })} />
+                <EntryChip
+                  key={entry.id}
+                  entry={entry}
+                  onClick={readOnly ? null : () => setEditing({ entry })}
+                  dragProps={
+                    canDrag
+                      ? {
+                          draggable: true,
+                          title: "Arraste para outro dia",
+                          onDragStart: (e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("text/plain", entry.id);
+                            setDragging(entry);
+                          },
+                          onDragEnd: () => {
+                            setDragging(null);
+                            setDropDay(null);
+                          }
+                        }
+                      : null
+                  }
+                />
               ))}
             </div>
           );

@@ -32,16 +32,17 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
       const res = await fetch("/api/content-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
-        body: JSON.stringify({ client_id: client.id, week_start: weekStart, guidance, count: count ? Number(count) : null })
+        body: JSON.stringify({ mode: "week", client_id: client.id, week_start: weekStart, guidance, count: count ? Number(count) : null })
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(json.error || "Não consegui criar os temas agora.");
         return;
       }
-      onCreated(json.criados || []);
-      setResult(json);
-      showToast(`${(json.criados || []).length} tema(s) criados pelo agente.`);
+      const all = [...(json.atualizados || []), ...(json.criados || [])];
+      onCreated(all);
+      setResult({ ...json, todos: all });
+      showToast(`Agente: ${(json.atualizados || []).length} tema(s) desenvolvido(s), ${(json.criados || []).length} novo(s).`);
     } catch (err) {
       console.error(err);
       setError("Não consegui falar com o servidor. Confira a internet e tente de novo.");
@@ -69,11 +70,16 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
           {result ? (
             <>
               <div className="agent-done">
-                <strong>{result.criados.length} tema(s) criados</strong> e marcados como “sugerido pelo agente”.
+                <strong>
+                  {result.atualizados?.length ? `${result.atualizados.length} tema(s) do calendário desenvolvido(s)` : ""}
+                  {result.atualizados?.length && result.criados?.length ? " e " : ""}
+                  {result.criados?.length ? `${result.criados.length} tema(s) novo(s)` : ""}
+                </strong>
+                , marcados como “sugerido pelo agente”.
                 {result.resumo && <p>{result.resumo}</p>}
               </div>
               <ul className="agent-list">
-                {result.criados.map((t) => (
+                {result.todos.map((t) => (
                   <li key={t.id}>
                     <span className="mono">{t.day.slice(8, 10)}/{t.day.slice(5, 7)}</span> {t.format && <strong>{t.format}</strong>} {t.theme}
                   </li>
@@ -93,8 +99,14 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
                 O agente lê o <strong>perfil do cliente</strong> (posicionamento, identidade visual, observações), as datas comemorativas da
                 semana e os temas recentes, e cria os posts com o briefing para o design.
               </p>
-              {existingCount > 0 && (
-                <div className="hint warn">Esta semana já tem {existingCount} tema(s). O agente evita esses dias e assuntos.</div>
+              {existingCount > 0 ? (
+                <div className="agent-plan">
+                  O calendário mensal já tem <strong>{existingCount} tema(s)</strong> nesta semana. O agente vai <strong>desenvolver esses temas</strong>{" "}
+                  (briefing e texto da peça) e só cria posts novos se você pedir mais do que {existingCount}. Temas com briefing pronto ou
+                  enviado ao design não são alterados.
+                </div>
+              ) : (
+                <div className="hint">O calendário mensal não tem temas nesta semana: o agente cria os posts do zero.</div>
               )}
               {!client.positioning && !client.identity && (
                 <div className="hint warn">O perfil deste cliente está vazio — preencha em “Perfil do cliente” para temas mais certeiros.</div>
@@ -114,7 +126,7 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
               <div>
                 <label htmlFor="ag-count">Quantos posts</label>
                 <select id="ag-count" value={count} onChange={(e) => setCount(e.target.value)} disabled={busy}>
-                  <option value="">Automático (frequência habitual do cliente)</option>
+                  <option value="">{existingCount > 0 ? `Automático (só os ${existingCount} do calendário)` : "Automático (frequência habitual do cliente)"}</option>
                   {[1, 2, 3, 4, 5, 6, 7].map((n) => (
                     <option key={n} value={n}>
                       {n}

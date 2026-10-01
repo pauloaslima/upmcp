@@ -1,0 +1,14 @@
+/* ---------- calendário mensal: barra de cima, arrastar e IA ---------- */
+.cal-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.cal-entry.draggable { cursor: grab; }
+.cal-entry.draggable:active { cursor: grabbing; }
+.cal-cell.drop-target { background: color-mix(in srgb, var(--gold) 14%, var(--surface)); box-shadow: inset 0 0 0 2px var(--gold); }
+
+.agent-plan { font-size: 13px; line-height: 1.5; background: color-mix(in srgb, var(--cal-accent) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cal-accent) 35%, var(--border)); border-radius: 10px; padding: 10px 12px; }
+
+.source-seg { width: 100%; }
+.source-seg .seg-btn { flex: 1; }
+.dictation { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--terracotta); display: inline-block; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }

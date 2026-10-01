@@ -76,10 +76,14 @@ Content-Type: application/json
 
 ### Botão "✨ Criar temas com IA" (Conteúdo da semana)
 
-Em cada semana, a equipe clica, escreve orientações opcionais e escolhe quantos posts.
+Em cada semana, a equipe clica, escreve orientações opcionais e escolhe quantos posts. Se o calendário mensal já tem temas nessa semana, o agente **desenvolve esses temas** (briefing, texto da peça) em vez de criar outros; só cria posts novos se pedirem mais do que os já planejados. Temas com briefing pronto ou enviado não são alterados.
 O servidor (`/api/content-agent`) chama o Claude (modelo `claude-opus-5-5`) com o perfil do cliente,
 as datas da semana e os temas recentes, e grava os temas com briefing. Precisa da variável
 `ANTHROPIC_API_KEY` no Vercel (chave criada em console.anthropic.com, com créditos).
+
+### Botão "✨ Criar calendário com IA" (Calendário mensal)
+
+Monta os temas do mês inteiro com 3 fontes de estratégia: **meses anteriores** (o agente deduz a linha dos últimos 3 meses), **texto** (a equipe escreve a estratégia) ou **áudio** (ditado pelo navegador, Chrome/Edge, que vira texto para revisar). Os temas já existentes no mês ficam como estão. No calendário, os temas podem ser arrastados entre os dias.
 
 ### Conector para o app do Claude (MCP)
 
@@ -87,7 +91,7 @@ Endereço do conector: `https://upmcp.vercel.app/api/mcp/<AGENT_API_KEY>`
 
 No app do Claude: **Configurações → Conectores → Adicionar conector personalizado** e cole o endereço.
 Depois é só pedir: *"crie o conteúdo da semana da 7ball"*. Ferramentas disponíveis:
-`listar_clientes`, `consultar_cliente`, `ver_temas_da_semana`, `gravar_temas`.
+`listar_clientes`, `consultar_cliente`, `ver_temas_da_semana`, `desenvolver_temas`, `gravar_temas`.
 
 O endereço contém a chave: trate-o como senha. Para trocar, mude `AGENT_API_KEY` no Vercel
 (isso também muda a chave do agente de design).
