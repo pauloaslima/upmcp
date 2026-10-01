@@ -13,7 +13,8 @@ import Notifications from "./Notifications";
 import { PasswordForm } from "./Login";
 import TasksPage from "./TasksPage";
 import RoutinesPage from "./RoutinesPage";
-import { ClientProfile, ClientTeam } from "./ClientTeam";
+import { ClientTeam } from "./ClientTeam";
+import { ClientProfile } from "./ClientProfile";
 import AssignmentsPage from "./AssignmentsPage";
 
 const VIEW_KEY = "upfluxo:view";

@@ -1,5 +1,6 @@
 import { agentAuthorized, agentDb, signedFiles, unauthorized } from "../../../../lib/agentApi";
 import { briefWithDefaults, designerPayload } from "../../../../lib/brief";
+import { brandFiles, materialsOf } from "../../../../lib/profileFields";
 
 // API para o agente que abre as demandas no sistema do designer.
 //
@@ -29,7 +30,10 @@ export async function GET(request) {
 
   const clientIds = [...new Set((entries || []).map((e) => e.client_id))];
   const { data: clients } = clientIds.length
-    ? await db.from("clients").select("id, name, identity, identity_files, positioning, notes, drive_url").in("id", clientIds)
+    ? await db
+        .from("clients")
+        .select("id, name, identity, identity_files, materials, positioning, target_audience, tone_of_voice, editorial_lines, art_references, notes, drive_url")
+        .in("id", clientIds)
     : { data: [] };
   const byId = Object.fromEntries((clients || []).map((c) => [c.id, c]));
 
@@ -38,9 +42,13 @@ export async function GET(request) {
     const client = byId[entry.client_id];
     const payload = designerPayload({ entry, brief: briefWithDefaults(entry, entry.day), client });
     payload.anexos = await signedFiles(db, entry.photos);
-    payload.id_visual.arquivos = entry.use_client_identity === false ? [] : await signedFiles(db, client?.identity_files);
+    payload.id_visual.arquivos = entry.use_client_identity === false ? [] : await signedFiles(db, brandFiles(client));
     payload.perfil_cliente = {
       posicionamento: client?.positioning || "",
+      publico_alvo: client?.target_audience || "",
+      tom_de_voz: client?.tone_of_voice || "",
+      referencias_para_artes: client?.art_references || "",
+      posts_de_exemplo: await signedFiles(db, materialsOf(client, "exemplos")),
       observacoes_importantes: client?.notes || "",
       link_drive: client?.drive_url || ""
     };

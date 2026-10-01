@@ -1,0 +1,31 @@
+/* ---------- perfil do cliente: materiais e sugestões da IA ---------- */
+.ai-btn { color: var(--cal-accent); border-color: color-mix(in srgb, var(--cal-accent) 40%, var(--border)); }
+.ai-btn:hover { color: var(--cal-accent); background: color-mix(in srgb, var(--cal-accent) 8%, var(--surface)); }
+
+.materials { margin: 6px 0 18px; display: flex; flex-direction: column; gap: 10px; }
+.materials-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.materials-head label { margin: 0; }
+.materials-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .materials-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .materials-grid { grid-template-columns: 1fr; } }
+.material-group { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-2); min-width: 0; }
+.material-group .checklist-group-title { flex-direction: row; align-items: baseline; gap: 6px; }
+.materials-upload { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.materials-upload select { width: auto; min-width: 200px; }
+
+.ai-panel { border: 1px solid color-mix(in srgb, var(--cal-accent) 40%, var(--border)); background: color-mix(in srgb, var(--cal-accent) 5%, var(--surface)); border-radius: 12px; padding: 14px; margin: 4px 0 18px; display: flex; flex-direction: column; gap: 12px; }
+.ai-panel-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ai-summary { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-dim); }
+.ai-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .ai-fields { grid-template-columns: 1fr; } }
+.ai-field { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ai-field.on { border-color: var(--cal-accent); box-shadow: 0 0 0 1px var(--cal-accent); }
+.ai-field-head { display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; }
+.ai-field-head input { width: 16px; height: 16px; accent-color: var(--cal-accent); }
+.ai-field-head small { margin-left: auto; font-weight: 600; color: var(--text-faint); font-size: 11px; }
+.ai-field textarea { font-size: 12.5px; }
+.ai-current summary { font-size: 11.5px; color: var(--text-dim); cursor: pointer; }
+.ai-current .profile-read { margin-top: 6px; font-size: 12.5px; }
+.ai-gaps { font-size: 12.5px; color: var(--text-dim); }
+.ai-gaps ul { margin: 4px 0 0; padding-left: 18px; }
+.ai-field.wide { grid-column: 1 / -1; }

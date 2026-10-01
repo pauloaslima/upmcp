@@ -95,3 +95,7 @@ Depois é só pedir: *"crie o conteúdo da semana da 7ball"*. Ferramentas dispon
 
 O endereço contém a chave: trate-o como senha. Para trocar, mude `AGENT_API_KEY` no Vercel
 (isso também muda a chave do agente de design).
+
+### Campos do perfil que os agentes recebem
+
+`posicionamento`, `publico_alvo`, `tom_de_voz`, `linhas_editoriais`, `identidade_visual` (texto + arquivos de marca), `referencias_para_artes`, `observacoes_importantes`, `link_drive` e `materiais` (links de 7 dias por categoria: Identidade de marca, Setup estratégico, Posts de exemplo, Linhas editoriais, Outros).

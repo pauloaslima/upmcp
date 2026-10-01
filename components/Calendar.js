@@ -5,6 +5,7 @@ import { MONTH_CAMPAIGNS, isoDate, specialDates } from "../lib/holidays";
 import { CALENDAR_FORMATS, formatStyle } from "../lib/pipeline";
 import { normalizeLink, removeFile, uploadFile } from "../lib/files";
 import { AttachmentList } from "./Board";
+import { brandFiles } from "../lib/profileFields";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -483,8 +484,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                 </label>
                 {values.use_client_identity ? (
                   <div className="identity-preview">
-                    {client.identity ? client.identity : <em>O cliente ainda não tem identidade visual cadastrada (tela do cliente → Identidade visual).</em>}
-                    {(client.identity_files || []).length > 0 && <span> · {client.identity_files.length} arquivo(s) de marca</span>}
+                    {client.identity ? client.identity : <em>O cliente ainda não tem identidade visual cadastrada (Perfil do cliente → Identidade visual).</em>}
+                    {brandFiles(client).length > 0 && <span> · {brandFiles(client).length} arquivo(s) de marca</span>}
                   </div>
                 ) : (
                   <textarea
