@@ -14,7 +14,7 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
   const first = isoDate(new Date(year, month - 1, 1));
   const last = isoDate(new Date(year, month, 0));
   const { entries, create, update, remove, removeMany, addLocal } = useCalendarEntries(client.id, first, last, showToast);
-  const [aiOpen, setAiOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(null); // null = fechado; senão, o modo inicial ("perfil", "historico"…)
   const [clearOpen, setClearOpen] = useState(false);
 
   // arrastar um tema para outro dia; o prazo automático do design acompanha a data
@@ -42,7 +42,7 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
         onUpdate={update}
         onDelete={remove}
         onMove={readOnly ? null : move}
-        onAi={readOnly ? null : () => setAiOpen(true)}
+        onAi={readOnly ? null : (source) => setAiOpen(source || "perfil")}
         onClear={readOnly ? null : () => setClearOpen(true)}
         client={client}
         showToast={showToast}
@@ -53,7 +53,8 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
           year={year}
           month={month}
           existingCount={entries.length}
-          onClose={() => setAiOpen(false)}
+          initialSource={aiOpen}
+          onClose={() => setAiOpen(null)}
           onCreated={addLocal}
           showToast={showToast}
         />

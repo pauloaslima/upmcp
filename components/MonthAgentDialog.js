@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { MONTHS } from "./Calendar";
+import { PROFILE_FIELDS } from "../lib/profileFields";
 
 const SOURCES = [
+  { id: "perfil", label: "Automático", icon: "✨" },
   { id: "historico", label: "Meses anteriores", icon: "🗂️" },
   { id: "texto", label: "Por texto", icon: "✍️" },
   { id: "audio", label: "Por áudio", icon: "🎙️" }
@@ -17,8 +19,11 @@ function getRecognizer() {
 }
 
 // "Criar calendário com IA": o agente monta os temas do mês seguindo a estratégia escolhida.
-export default function MonthAgentDialog({ client, year, month, existingCount, onClose, onCreated, showToast }) {
-  const [source, setSource] = useState("historico");
+export default function MonthAgentDialog({ client, year, month, existingCount, initialSource, onClose, onCreated, showToast }) {
+  const [source, setSource] = useState(initialSource || "perfil");
+  const [extra, setExtra] = useState(""); // orientação opcional no modo automático
+  const filled = PROFILE_FIELDS.filter((f) => (client[f.key] || "").trim());
+  const missing = PROFILE_FIELDS.filter((f) => !(client[f.key] || "").trim());
   const [text, setText] = useState("");
   const [audioText, setAudioText] = useState("");
   const [interim, setInterim] = useState("");
@@ -76,12 +81,12 @@ export default function MonthAgentDialog({ client, year, month, existingCount, o
     recRef.current?.stop();
   }
 
-  const strategy = source === "texto" ? text : source === "audio" ? audioText : "";
+  const strategy = source === "texto" ? text : source === "audio" ? audioText : source === "perfil" ? extra : "";
 
   async function run(e) {
     e.preventDefault();
     if (listening) stopDictation();
-    if (source !== "historico" && strategy.trim().length < 10) {
+    if ((source === "texto" || source === "audio") && strategy.trim().length < 10) {
       setError(source === "audio" ? "Grave (ou escreva) a explicação da estratégia antes de criar." : "Escreva a estratégia do mês antes de criar.");
       return;
     }
@@ -184,6 +189,40 @@ export default function MonthAgentDialog({ client, year, month, existingCount, o
                 </div>
               </div>
 
+              {source === "perfil" && (
+                <>
+                  <p className="agent-intro">
+                    O agente <strong>lê o Perfil do cliente</strong> para entender o que ele faz, para quem e como fala;{" "}
+                    <strong>analisa os calendários dos últimos 3 meses</strong> (se houver) — frequência, formatos e pilares que ficaram de fora — e
+                    monta {MONTHS[month - 1].toLowerCase()} seguindo as linhas editoriais, com as datas comemorativas que fazem sentido.
+                  </p>
+                  <div className="profile-check">
+                    {PROFILE_FIELDS.map((f) => (
+                      <span key={f.key} className={"chip " + ((client[f.key] || "").trim() ? "st-feito" : "")}>
+                        {(client[f.key] || "").trim() ? "✓ " : "— "}
+                        {f.label}
+                      </span>
+                    ))}
+                  </div>
+                  {filled.length === 0 ? (
+                    <div className="hint warn">O perfil está vazio: o agente vai depender só dos meses anteriores. Preencha o Perfil do cliente (ou use “Preencher com IA”) para um calendário mais certeiro.</div>
+                  ) : (
+                    missing.length > 0 && <div className="hint">Campos vazios ({missing.map((f) => f.label).join(", ")}) o agente deduz pelo restante do perfil.</div>
+                  )}
+                  <div>
+                    <label htmlFor="mo-extra">Orientação extra (opcional)</label>
+                    <textarea
+                      id="mo-extra"
+                      rows={3}
+                      value={extra}
+                      onChange={(e) => setExtra(e.target.value)}
+                      disabled={busy}
+                      placeholder="Ex.: dar mais peso a vendas neste mês; evento de aniversário da empresa no dia 20."
+                    />
+                  </div>
+                </>
+              )}
+
               {source === "historico" && (
                 <p className="agent-intro">
                   O agente analisa os <strong>calendários dos últimos 3 meses</strong> deste cliente (frequência, dias, horários, formatos e
@@ -256,7 +295,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, o
                   {monthName} já tem {existingCount} tema(s). Eles continuam como estão; o agente completa o mês em volta deles.
                 </div>
               )}
-              {!client.positioning && !client.identity && (
+              {source !== "perfil" && !client.positioning && !client.identity && (
                 <div className="hint warn">O perfil deste cliente está vazio — preencha em “Perfil do cliente” para um calendário mais certeiro.</div>
               )}
 

@@ -83,7 +83,7 @@ as datas da semana e os temas recentes, e grava os temas com briefing. Precisa d
 
 ### Botão "✨ Criar calendário com IA" (Calendário mensal)
 
-Monta os temas do mês inteiro com 3 fontes de estratégia: **meses anteriores** (o agente deduz a linha dos últimos 3 meses), **texto** (a equipe escreve a estratégia) ou **áudio** (ditado pelo navegador, Chrome/Edge, que vira texto para revisar). Os temas já existentes no mês ficam como estão. No calendário, os temas podem ser arrastados entre os dias.
+Monta os temas do mês inteiro. Modo padrão **Automático**: lê o Perfil do cliente (posicionamento, público, tom, linhas editoriais, identidade, referências, observações), analisa os últimos 3 meses e monta o mês seguindo as linhas editoriais e seus pesos; quando o mês está vazio, o calendário mostra o botão "Criar automaticamente". Outras fontes de estratégia: **meses anteriores** (o agente deduz a linha dos últimos 3 meses), **texto** (a equipe escreve a estratégia) ou **áudio** (ditado pelo navegador, Chrome/Edge, que vira texto para revisar). Os temas já existentes no mês ficam como estão. No calendário, os temas podem ser arrastados entre os dias.
 
 ### Conector para o app do Claude (MCP)
 

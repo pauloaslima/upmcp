@@ -102,7 +102,7 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
       {!readOnly && (onAi || onMove || onClear) && (
         <div className="cal-toolbar">
           {onAi && (
-            <button className="btn btn-gold" onClick={onAi}>
+            <button className="btn btn-gold" onClick={() => onAi()}>
               ✨ Criar calendário com IA
             </button>
           )}
@@ -112,6 +112,17 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
             </button>
           )}
           {onMove && <span className="hint">Arraste os temas entre os dias para remanejar o mês.</span>}
+        </div>
+      )}
+      {!readOnly && onAi && entries.length === 0 && (
+        <div className="cal-empty">
+          <div>
+            <strong>Este mês ainda não tem temas.</strong>
+            <span>O agente lê o Perfil do cliente, analisa os meses anteriores e monta o calendário de {MONTHS[month - 1].toLowerCase()}.</span>
+          </div>
+          <button className="btn btn-gold" onClick={() => onAi("perfil")}>
+            ✨ Criar automaticamente
+          </button>
         </div>
       )}
       <div className="cal-head">

@@ -12,3 +12,9 @@
 .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--terracotta); display: inline-block; animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+
+/* mês vazio: convite para criar o calendário automático */
+.cal-empty { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; padding: 12px 14px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--cal-accent) 55%, var(--border)); background: color-mix(in srgb, var(--cal-accent) 6%, var(--surface)); }
+.cal-empty div { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.cal-empty span { color: var(--text-dim); }
+.profile-check { display: flex; flex-wrap: wrap; gap: 6px; }

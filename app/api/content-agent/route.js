@@ -3,6 +3,7 @@ import { clientContext, cleanAgentEntries, weekInfo } from "../../../lib/agentCo
 import { ContentAgentError, generateMonth, generateWeek } from "../../../lib/contentAgent";
 import { MONTH_NAMES, addDays, calendarTask, iso, mondayOf, parse, todayInBrazil } from "../../../lib/deadlines";
 import { MONTH_CAMPAIGNS, specialDates } from "../../../lib/holidays";
+import { PROFILE_FIELDS } from "../../../lib/profileFields";
 
 // Agente de conteúdo dentro do sistema. Só para a equipe logada.
 //
@@ -98,9 +99,9 @@ async function runWeek(db, client, body) {
 
 async function runMonth(db, client, body) {
   if (!/^\d{4}-\d{2}$/.test(body.month || "")) return Response.json({ error: "Informe o mês." }, { status: 400 });
-  const source = ["historico", "texto", "audio"].includes(body.source) ? body.source : "historico";
+  const source = ["perfil", "historico", "texto", "audio"].includes(body.source) ? body.source : "perfil";
   const strategy = String(body.strategy || "").trim().slice(0, 8000);
-  if (source !== "historico" && strategy.length < 10) {
+  if ((source === "texto" || source === "audio") && strategy.length < 10) {
     return Response.json({ error: "Descreva a estratégia do mês (texto ou áudio) antes de criar." }, { status: 400 });
   }
   const postsPerWeek = Number.isInteger(body.posts_per_week) && body.posts_per_week > 0 && body.posts_per_week <= 14 ? body.posts_per_week : null;
@@ -122,7 +123,13 @@ async function runMonth(db, client, body) {
       .order("day")
   ]);
   if (source === "historico" && !(history || []).length) {
-    return Response.json({ error: "Este cliente ainda não tem temas nos meses anteriores. Use a opção por texto ou por áudio." }, { status: 400 });
+    return Response.json({ error: "Este cliente ainda não tem temas nos meses anteriores. Use a opção Automático (perfil), por texto ou por áudio." }, { status: 400 });
+  }
+  if (source === "perfil" && !(history || []).length && !PROFILE_FIELDS.some((f) => (client[f.key] || "").trim())) {
+    return Response.json(
+      { error: "O Perfil do cliente está vazio e não há meses anteriores. Preencha o perfil (ou use “Preencher com IA” com os materiais) antes de criar." },
+      { status: 400 }
+    );
   }
 
   const special = specialDates(y);
