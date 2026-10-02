@@ -16,3 +16,8 @@
 /* backlog: pedidos do cliente */
 .tag-request { background: color-mix(in srgb, #7A5CC8 16%, transparent); color: #7A5CC8; }
 @media (prefers-color-scheme: dark) { .tag-request { color: #B9A6F0; } }
+.tag-receive { background: color-mix(in srgb, var(--gold) 20%, transparent); color: var(--gold-ink); }
+.receive-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; line-height: 1.5; background: color-mix(in srgb, #7A5CC8 8%, var(--surface)); border: 1px solid color-mix(in srgb, #7A5CC8 35%, var(--border)); border-radius: 10px; padding: 10px 12px; }
+.receive-panel.done { background: color-mix(in srgb, var(--teal) 8%, var(--surface)); border-color: color-mix(in srgb, var(--teal) 35%, var(--border)); }
+.receive-panel > div { flex: 1 1 260px; }
+.btn-gold.task-done-btn { color: #2A1F06; border-color: transparent; }

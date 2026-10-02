@@ -31,7 +31,7 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
     async function load() {
       let q = supabase
         .from("cards")
-        .select("id, title, client_id, column_id, publish_date, due_date, assignee_id, format")
+        .select("id, title, client_id, column_id, publish_date, due_date, assignee_id, format, requested_by, received_at")
         .not("assignee_id", "is", null);
       if (who !== "all") q = q.eq("assignee_id", who);
       const { data, error } = await q;
@@ -111,6 +111,18 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
     filter === "pendentes" ? !i.done : filter === "atrasadas" ? i.status.id === "atrasado" : filter === "executadas" ? i.done : true
   );
 
+  // recepcionar demanda do Backlog: entra no calendário na data de publicação
+  async function receive(card) {
+    const { error } = await supabase.rpc("receive_demand", { p_card: card.id });
+    if (error) {
+      showToast(error.message.includes("data de publicação") ? "Defina a data de publicação da demanda antes de recepcionar." : error.message || "Não consegui recepcionar.");
+      return;
+    }
+    setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, column_id: c.column_id === "backlog" ? "estruturacao" : c.column_id, received_at: new Date().toISOString() } : c)));
+    const [, m, d] = (card.publish_date || "").split("-");
+    showToast(`Demanda recepcionada — entrou no calendário em ${d}/${m}.`);
+  }
+
   async function moveCard(card, column) {
     const { error } = await supabase.from("cards").update({ column_id: column }).eq("id", card.id);
     if (error) {
@@ -179,7 +191,7 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
                   {i.title}
                 </button>
                 <div className="task-item-meta">
-                  <strong>{clientName[i.clientId] || "Sem cliente"}</strong> · {i.type === "card" ? "Peça · " + i.sub : KIND_LABEL[i.task.kind] + " · " + i.sub}
+                  <strong>{clientName[i.clientId] || "Sem cliente"}</strong> · {i.type === "card" ? (i.card.column_id === "backlog" ? "Demanda no Backlog" : "Peça · " + i.sub) : KIND_LABEL[i.task.kind] + " · " + i.sub}
                   {who === "all" && people[i.assignee] && <> · {people[i.assignee].full_name || people[i.assignee].email}</>}
                 </div>
               </div>
@@ -189,11 +201,18 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
               <span className={"chip st-" + i.status.id}>{i.status.id === "feito" ? "✓ " + i.status.label : i.status.label}</span>
               {i.type === "card" && (
                 <>
-                  {!i.done && (
-                    <button className="btn btn-plain task-done-btn" onClick={() => moveCard(i.card, "concluidos")}>
-                      ✓ Concluir
-                    </button>
-                  )}
+                  {!i.done &&
+                    (i.card.column_id === "backlog" && !i.card.received_at ? (
+                      i.card.assignee_id === me.id || isAdmin ? (
+                        <button className="btn btn-gold task-done-btn" onClick={() => receive(i.card)}>
+                          ✓ Recepcionar
+                        </button>
+                      ) : null
+                    ) : (
+                      <button className="btn btn-plain task-done-btn" onClick={() => moveCard(i.card, "concluidos")}>
+                        ✓ Concluir
+                      </button>
+                    ))}
                   <select className="task-move" value={i.card.column_id} onChange={(e) => moveCard(i.card, e.target.value)} title="Mover para outra etapa">
                     {COLUMNS.map((c) => (
                       <option key={c.id} value={c.id}>

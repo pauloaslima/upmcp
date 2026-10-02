@@ -568,7 +568,7 @@ export default function AppShell({ session, profile }) {
                 />
               )}
 
-              {view.section === "producao" && <Board key={current.id} client={current} isStaff={isStaff} team={team} showToast={showToast} />}
+              {view.section === "producao" && <Board key={current.id} client={current} isStaff={isStaff} isAdmin={isAdmin} me={session.user.id} team={team} showToast={showToast} />}
             </>
           )}
         </main>

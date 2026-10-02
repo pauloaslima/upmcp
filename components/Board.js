@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
 import { cardDue, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/deadlines";
 import { openAttachment, removeFile, uploadFile } from "../lib/files";
+import { shortName } from "../lib/people";
 
 export function initials(person) {
   const name = (person?.full_name || person?.email || "?").trim();
@@ -29,7 +30,7 @@ function checklistProgress(card) {
 // Linha de produção de um cliente.
 // Equipe (admin/funcionário): todas as colunas, arrastar, criar e editar.
 // Cliente: só "Em aprovação", "Aprovados" e "Reprovados"; aprova, reprova e comenta.
-export default function Board({ client, isStaff, team = [], showToast }) {
+export default function Board({ client, isStaff, isAdmin = false, me = null, team = [], showToast }) {
   const people = useMemo(() => Object.fromEntries(team.map((p) => [p.id, p])), [team]);
   const [cards, setCards] = useState({}); // id -> card
   const [search, setSearch] = useState("");
@@ -90,7 +91,8 @@ export default function Board({ client, isStaff, team = [], showToast }) {
       .filter((card) => !q || [card.title, card.objective, card.pillar, card.copy].join(" ").toLowerCase().includes(q))
       .sort((a, b) => (a.publish_date || "9999").localeCompare(b.publish_date || "9999"))
       .forEach((card) => {
-        const col = map[card.column_id] ? card.column_id : isStaff ? "estruturacao" : null;
+        // cliente: pedidos já recepcionados aparecem juntos em "Em produção"
+        const col = map[card.column_id] ? card.column_id : isStaff ? "estruturacao" : "producao";
         if (col) map[col].push(card);
       });
     return map;
@@ -175,7 +177,7 @@ export default function Board({ client, isStaff, team = [], showToast }) {
           </button>
         ) : (
           <button className="btn btn-gold" onClick={() => setOpenId("__nova__")}>
-            + Nova solicitação
+            + Nova demanda
           </button>
         )}
       </div>
@@ -191,13 +193,13 @@ export default function Board({ client, isStaff, team = [], showToast }) {
               people={people}
               onOpen={(id) => setOpenId(id)}
               onAdd={
-                isStaff
-                  ? async () => {
-                      const card = await createCard(col.id);
-                      if (card) setOpenId(card.id);
-                    }
-                  : col.id === "backlog"
-                    ? () => setOpenId("__nova__")
+                col.id === "backlog"
+                  ? () => setOpenId("__nova__") // qualquer usuário cria demanda pelo mesmo formulário
+                  : isStaff
+                    ? async () => {
+                        const card = await createCard(col.id);
+                        if (card) setOpenId(card.id);
+                      }
                     : null
               }
               onDrop={(id) => moveCard(id, col.id)}
@@ -207,9 +209,13 @@ export default function Board({ client, isStaff, team = [], showToast }) {
         </div>
       </div>
 
-      {!isStaff && (openId === "__nova__" || (openCard && openCard.column_id === "backlog")) && (
+      {(openId === "__nova__" || (!isStaff && openCard && openCard.column_id === "backlog")) && (
         <RequestModal
           card={openId === "__nova__" ? null : openCard}
+          isStaff={isStaff}
+          client={client}
+          team={team}
+          me={me}
           onClose={() => setOpenId(null)}
           onSaved={(row) => setCards((prev) => ({ ...prev, [row.id]: row }))}
           onDeleted={(id) =>
@@ -231,8 +237,11 @@ export default function Board({ client, isStaff, team = [], showToast }) {
             onClose={() => setOpenId(null)}
             onSave={(patch) => saveCard(openCard.id, patch)}
             onDelete={() => deleteCard(openCard.id)}
+            onReceived={(row) => setCards((prev) => ({ ...prev, [row.id]: row }))}
             showToast={showToast}
             team={team}
+            me={me}
+            isAdmin={isAdmin}
           />
         ) : (
           <ReviewModal
@@ -272,12 +281,12 @@ function ColumnView({ col, cards, isStaff, people, onOpen, onAdd, onDrop, dragCa
       <div className="col-cards">
         {cards.length === 0 && <div className="empty-col">Nada aqui.</div>}
         {cards.map((card) => (
-          <CardTile key={card.id} card={card} isStaff={isStaff} assignee={people[card.assignee_id]} onOpen={onOpen} dragCardId={dragCardId} />
+          <CardTile key={card.id} card={card} isStaff={isStaff} people={people} assignee={people[card.assignee_id]} onOpen={onOpen} dragCardId={dragCardId} />
         ))}
       </div>
       {onAdd && (
         <button className="col-add" onClick={onAdd}>
-          {!isStaff ? "+ nova solicitação" : col.id === "backlog" ? "+ adicionar demanda" : "+ adicionar peça"}
+          {col.id === "backlog" ? "+ nova demanda" : "+ adicionar peça"}
         </button>
       )}
     </div>
@@ -286,8 +295,10 @@ function ColumnView({ col, cards, isStaff, people, onOpen, onAdd, onDrop, dragCa
 
 const REQUEST_FORMATS = ["Reels", "Carrossel", "Estático", "Story", "Vídeo", "Outro"];
 
-// Cliente pede uma demanda nova (coluna Backlog) ou ajusta a que ainda está no backlog.
-function RequestModal({ card, onClose, onSaved, onDeleted, showToast }) {
+// Nova demanda no Backlog (qualquer usuário) ou ajuste da solicitação do cliente enquanto está no backlog.
+// A data de publicação é obrigatória: é nela que a demanda entra no calendário quando for recepcionada.
+function RequestModal({ card, isStaff, client, team = [], me, onClose, onSaved, onDeleted, showToast }) {
+  const [assignee, setAssignee] = useState("");
   const [values, setValues] = useState({
     title: card?.title || "",
     details: card?.copy || "",
@@ -312,8 +323,40 @@ function RequestModal({ card, onClose, onSaved, onDeleted, showToast }) {
       showToast("Escreva o que você precisa.");
       return;
     }
+    if (!values.date) {
+      showToast("Informe a data de publicação.");
+      return;
+    }
     setBusy(true);
     try {
+      if (isStaff) {
+        // equipe: cria a demanda direto, já com o responsável (se escolhido)
+        const { data: row, error } = await supabase
+          .from("cards")
+          .insert({
+            ...defaultCard("backlog"),
+            title: values.title.trim(),
+            copy: values.details,
+            format: values.format || "Outro",
+            publish_date: values.date,
+            client: client.name,
+            client_id: client.id,
+            requested_by: me,
+            assignee_id: assignee || null
+          })
+          .select("*")
+          .single();
+        if (error) throw error;
+        if (pendingFiles.length) {
+          const uploaded = [];
+          for (const f of pendingFiles) uploaded.push(await uploadFile(row.id, f));
+          const { data: withFiles } = await supabase.from("cards").update({ attachments: uploaded }).eq("id", row.id).select("*").single();
+          onSaved(withFiles || row);
+        } else onSaved(row);
+        showToast("Demanda criada no Backlog.");
+        onClose();
+        return;
+      }
       let id = card?.id;
       if (!id) {
         const { data, error } = await supabase.rpc("client_create_request", {
@@ -366,8 +409,10 @@ function RequestModal({ card, onClose, onSaved, onDeleted, showToast }) {
       <form className="modal modal-sm" onSubmit={save}>
         <div className="modal-head">
           <div style={{ flex: 1 }}>
-            <h3 className="entry-title">{card ? "Sua solicitação" : "Nova solicitação"}</h3>
-            <div className="entry-date">A equipe da Up! recebe o pedido na coluna Backlog.</div>
+            <h3 className="entry-title">{card ? "Sua solicitação" : "Nova demanda"}</h3>
+            <div className="entry-date">
+              {isStaff ? "Entra no Backlog; ao ser recepcionada, vai para o calendário na data de publicação." : "A equipe da Up! recebe o pedido na coluna Backlog."}
+            </div>
           </div>
           <button type="button" className="icon-btn" title="Fechar" onClick={onClose} disabled={busy}>
             ✕
@@ -400,10 +445,24 @@ function RequestModal({ card, onClose, onSaved, onDeleted, showToast }) {
               </select>
             </div>
             <div>
-              <label htmlFor="rq-date">Para quando? (opcional)</label>
-              <input id="rq-date" type="date" {...set("date")} />
+              <label htmlFor="rq-date">Data de publicação</label>
+              <input id="rq-date" type="date" required {...set("date")} />
             </div>
           </div>
+          {isStaff && !card && (
+            <div>
+              <label htmlFor="rq-assignee">Responsável (opcional)</label>
+              <select id="rq-assignee" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                <option value="">Definir depois</option>
+                {team.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name || p.email}
+                  </option>
+                ))}
+              </select>
+              <div className="hint">O responsável recebe o aviso e é quem recepciona a demanda.</div>
+            </div>
+          )}
           <div>
             <label>Arquivos e referências (opcional)</label>
             <AttachmentList
@@ -447,7 +506,7 @@ function RequestModal({ card, onClose, onSaved, onDeleted, showToast }) {
                 Cancelar
               </button>
               <button type="submit" className="btn btn-gold" disabled={busy}>
-                {busy ? "Enviando…" : card ? "Salvar" : "Enviar solicitação"}
+                {busy ? "Enviando…" : card ? "Salvar" : isStaff ? "Criar demanda" : "Enviar solicitação"}
               </button>
             </div>
           </div>
@@ -457,7 +516,7 @@ function RequestModal({ card, onClose, onSaved, onDeleted, showToast }) {
   );
 }
 
-function CardTile({ card, isStaff, assignee, onOpen, dragCardId }) {
+function CardTile({ card, isStaff, people = {}, assignee, onOpen, dragCardId }) {
   const prog = checklistProgress(card);
   const pct = prog.total ? Math.round((100 * prog.done) / prog.total) : 0;
   const barColor = (COLUMNS[COL_INDEX[card.column_id]] || {}).color || "var(--border)";
@@ -481,7 +540,10 @@ function CardTile({ card, isStaff, assignee, onOpen, dragCardId }) {
       <div className="card-tags">
         {card.format && <span className="tag tag-format">{card.format}</span>}
         {isStaff && card.sensitive && <span className="tag tag-sensitive">sensível</span>}
-        {isStaff && card.requested_by && <span className="tag tag-request">pedido do cliente</span>}
+        {isStaff && card.requested_by && (
+          <span className="tag tag-request">{people[card.requested_by] ? "demanda de " + shortName(people[card.requested_by]) : "pedido do cliente"}</span>
+        )}
+        {isStaff && card.column_id === "backlog" && card.assignee_id && !card.received_at && <span className="tag tag-receive">aguardando recepção</span>}
         {deadline && (
           <span className={"chip st-" + deadline.status.id} title={deadline.label}>
             prazo {shortDate(deadline.due)}
@@ -650,7 +712,8 @@ function ReviewModal({ card, onClose, onReview, showToast }) {
     if (ok) onClose();
   }
 
-  const status = (CLIENT_COLUMNS.find((c) => c.id === card.column_id) || {}).name;
+  const status = (CLIENT_COLUMNS.find((c) => c.id === card.column_id) || { name: "Em produção" }).name;
+  const canReview = ["aprovacao", "aprovados", "reprovados"].includes(card.column_id);
 
   return (
     <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && onClose()}>
@@ -692,7 +755,12 @@ function ReviewModal({ card, onClose, onReview, showToast }) {
 
           <CardComments cardId={card.id} showToast={showToast} />
 
-          {rejecting ? (
+          {!canReview ? (
+            <div className="agent-plan">
+              A equipe da Up! já recebeu este pedido e está produzindo. Quando a peça estiver pronta, ela aparece em “Em aprovação” para você
+              aprovar.
+            </div>
+          ) : rejecting ? (
             <div className="review-box">
               <label htmlFor="reject-reason">O que precisa mudar?</label>
               <textarea
@@ -728,7 +796,57 @@ function ReviewModal({ card, onClose, onReview, showToast }) {
   );
 }
 
-function CardModal({ card, onClose, onSave, onDelete, showToast, team }) {
+// Demanda (do Backlog ou pedida por alguém): mostra quem pediu e, para o responsável,
+// o botão "Recepcionar demanda" — ela sai do Backlog e entra no calendário na data de publicação.
+function ReceivePanel({ card, team, me, isAdmin, onReceived, showToast }) {
+  const [busy, setBusy] = useState(false);
+  const people = Object.fromEntries(team.map((p) => [p.id, p]));
+  const requester = card.requested_by ? (people[card.requested_by] ? shortName(people[card.requested_by]) : "o cliente") : null;
+  const canReceive = !card.received_at && card.assignee_id && (card.assignee_id === me || isAdmin);
+  const [y, m, d] = (card.publish_date || "").split("-");
+
+  async function receive() {
+    setBusy(true);
+    const { error } = await supabase.rpc("receive_demand", { p_card: card.id });
+    if (error) {
+      setBusy(false);
+      showToast(error.message.includes("data de publicação") ? "Defina a data de publicação antes de recepcionar." : error.message || "Não consegui recepcionar.");
+      return;
+    }
+    const { data } = await supabase.from("cards").select("*").eq("id", card.id).single();
+    setBusy(false);
+    if (data) onReceived(data);
+    showToast(`Demanda recepcionada — entrou no calendário em ${d}/${m}.`);
+  }
+
+  return (
+    <div className={"receive-panel" + (card.received_at ? " done" : "")}>
+      <div>
+        <strong>{requester ? `Demanda pedida por ${requester}.` : "Demanda do Backlog."}</strong>{" "}
+        {card.received_at ? (
+          <>
+            Recepcionada por {shortName(people[card.received_by]) || "equipe"} em {new Date(card.received_at).toLocaleDateString("pt-BR")} — está no calendário.
+          </>
+        ) : !card.assignee_id ? (
+          "Defina o responsável abaixo; ele recepciona a demanda."
+        ) : !card.publish_date ? (
+          "Defina a data de publicação para poder recepcionar."
+        ) : canReceive ? (
+          <>Ao recepcionar, ela vai para “Em estruturação” e entra no calendário em {d}/{m}/{y}.</>
+        ) : (
+          <>Aguardando {shortName(people[card.assignee_id]) || "o responsável"} recepcionar.</>
+        )}
+      </div>
+      {canReceive && (
+        <button type="button" className="btn btn-gold" onClick={receive} disabled={busy || !card.publish_date}>
+          {busy ? "Recepcionando…" : "✓ Recepcionar demanda"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CardModal({ card, onClose, onSave, onDelete, onReceived, showToast, team, me, isAdmin }) {
   const [local, setLocal] = useState(card);
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -807,11 +925,8 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, team }) {
           </button>
         </div>
         <div className="modal-body">
-          {local.requested_by && (
-            <div className="agent-plan">
-              <strong>Pedido do cliente.</strong> O que ele escreveu está em “Copy / legenda” e os arquivos que mandou, em “Arquivos anexados”.
-              {local.column_id === "backlog" && " Para começar, mude a etapa para “Em estruturação”."}
-            </div>
+          {(local.requested_by || local.column_id === "backlog") && (
+            <ReceivePanel card={local} team={team} me={me} isAdmin={isAdmin} onReceived={onReceived} showToast={showToast} />
           )}
           <div>
             <label>Etapa</label>
