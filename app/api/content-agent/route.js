@@ -4,11 +4,14 @@ import { ContentAgentError, generateMonth, generateWeek } from "../../../lib/con
 import { MONTH_NAMES, addDays, calendarTask, iso, mondayOf, parse, todayInBrazil } from "../../../lib/deadlines";
 import { MONTH_CAMPAIGNS, specialDates } from "../../../lib/holidays";
 import { PROFILE_FIELDS } from "../../../lib/profileFields";
+import { briefDescription, briefWithDefaults } from "../../../lib/brief";
 
 // Agente de conteúdo dentro do sistema. Só para a equipe logada.
 //
 // Semana:  POST { mode: "week", client_id, week_start: "AAAA-MM-DD", guidance, count }
 //          → desenvolve os temas do calendário daquela semana (briefing) e cria novos só se faltar
+// Um post: POST { mode: "entry", client_id, entry_id, guidance }
+//          → gera o conteúdo de um tema só (ex.: demanda que veio do Backlog)
 // Mês:     POST { mode: "month", client_id, month: "AAAA-MM", source: "historico"|"texto"|"audio",
 //                 strategy, posts_per_week }
 //          → cria o calendário de temas do mês em volta do que já existe
@@ -34,6 +37,7 @@ export async function POST(request) {
 
   try {
     if (body.mode === "month") return await runMonth(db, client, body);
+    if (body.mode === "entry") return await runEntry(db, client, body);
     return await runWeek(db, client, body);
   } catch (err) {
     if (err instanceof ContentAgentError) return Response.json({ error: err.message }, { status: 502 });
@@ -62,25 +66,7 @@ async function runWeek(db, client, body) {
   const result = await generateWeek({ context, week, planned: planned || [], guidance: body.guidance, count });
 
   // 1) temas do calendário desenvolvidos: atualiza (o dia não muda)
-  const updated = [];
-  for (const d of result.desenvolvidos) {
-    const original = planned.find((p) => p.id === d.id);
-    // briefing já pronto ou enviado ao design: não mexe
-    if (original.brief_status && original.brief_status !== "rascunho") continue;
-    // o que a equipe já preencheu prevalece; o agente só completa o que está vazio
-    const merged = {
-      ...d,
-      day: original.day,
-      format: original.format || d.format,
-      post_time: original.post_time || d.post_time,
-      notes: original.notes || d.notes
-    };
-    const { rows } = cleanAgentEntries(client.id, [merged]);
-    if (!rows.length) continue;
-    const { client_id, day, refs, use_client_identity, ...patch } = rows[0];
-    const { data } = await db.from("calendar_entries").update(patch).eq("id", d.id).select("*").maybeSingle();
-    if (data) updated.push(data);
-  }
+  const updated = await applyDeveloped(db, client, planned || [], result.desenvolvidos);
 
   // 2) posts novos (só quando faltavam)
   let created = [];
@@ -95,6 +81,71 @@ async function runWeek(db, client, body) {
     return Response.json({ error: "Nenhum tema foi gerado para essa semana. Tente com outra orientação." }, { status: 422 });
   }
   return Response.json({ ok: true, resumo: result.resumo, atualizados: updated, criados: created });
+}
+
+// Grava o que o agente desenvolveu nos temas do calendário. O que a equipe já preencheu prevalece,
+// e temas com briefing pronto ou enviado ao design não são alterados.
+async function applyDeveloped(db, client, planned, desenvolvidos) {
+  const updated = [];
+  for (const d of desenvolvidos) {
+    const original = planned.find((p) => p.id === d.id);
+    if (!original || (original.brief_status && original.brief_status !== "rascunho")) continue;
+    const merged = {
+      ...d,
+      day: original.day,
+      format: original.format || d.format,
+      post_time: original.post_time || d.post_time,
+      notes: original.notes || d.notes
+    };
+    const { rows } = cleanAgentEntries(client.id, [merged]);
+    if (!rows.length) continue;
+    const { client_id, day, refs, use_client_identity, ...patch } = rows[0];
+    const { data } = await db.from("calendar_entries").update(patch).eq("id", d.id).select("*").maybeSingle();
+    if (data) updated.push(data);
+  }
+  return updated;
+}
+
+// Um post só: gera o conteúdo (briefing, texto da peça…) de um tema específico do calendário.
+// Útil para demandas que chegam do Backlog depois que o mês já foi planejado.
+async function runEntry(db, client, body) {
+  const { data: entry } = body.entry_id
+    ? await db.from("calendar_entries").select(ENTRY_FIELDS + ", client_id, card_id").eq("id", body.entry_id).maybeSingle()
+    : { data: null };
+  if (!entry || entry.client_id !== client.id) return Response.json({ error: "Tema não encontrado." }, { status: 404 });
+  if (entry.brief_status && entry.brief_status !== "rascunho") {
+    return Response.json({ error: "O briefing deste post já está pronto ou enviado ao design. Reabra o briefing para gerar de novo." }, { status: 409 });
+  }
+
+  const context = await clientContext(db, client, { withFiles: false });
+  const pubMonday = mondayOf(parse(entry.day));
+  const offset = Math.round((pubMonday - mondayOf(parse(todayInBrazil()))) / (7 * 86400000));
+  const { data: others } = await db
+    .from("calendar_entries")
+    .select("theme")
+    .eq("client_id", client.id)
+    .gte("day", iso(pubMonday))
+    .lte("day", iso(addDays(pubMonday, 6)))
+    .neq("id", entry.id);
+  const guidance = [
+    body.guidance,
+    (others || []).length ? "Outros posts desta semana (não repita o assunto): " + others.map((o) => o.theme).join("; ") : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const { card_id, client_id, ...asPlanned } = entry;
+  const result = await generateWeek({ context, week: weekInfo(pubMonday, offset, []), planned: [asPlanned], guidance, count: 1 });
+  const [data] = await applyDeveloped(db, client, [entry], result.desenvolvidos);
+  if (!data) return Response.json({ error: "Nenhum conteúdo foi gerado para este post. Tente de novo." }, { status: 422 });
+
+  // tema ligado a uma peça (ex.: demanda recepcionada do Backlog): o briefing vai também para a peça
+  if (entry.card_id) {
+    const text = "Conteúdo gerado para o post:\n\n" + briefDescription(data, briefWithDefaults(data, data.day), client.identity);
+    const { data: comment } = await db.from("card_comments").insert({ card_id: entry.card_id, body: text }).select("id").maybeSingle();
+    if (comment) await db.from("card_comments").update({ author_name: "Up! Fluxo", author_role: "funcionario" }).eq("id", comment.id);
+  }
+  return Response.json({ ok: true, resumo: result.resumo, atualizados: [data], criados: [] });
 }
 
 async function runMonth(db, client, body) {

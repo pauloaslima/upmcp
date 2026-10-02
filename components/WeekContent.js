@@ -43,7 +43,39 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
   const tasks = useClientTasks(isStaff ? client.id : false, iso(addDays(parse(first), -1)), showToast);
   const [cards, setCards] = useState({});
   const [editing, setEditing] = useState(null);
-  const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Criar temas"
+  const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Gerar conteúdo"
+  const [generating, setGenerating] = useState(() => new Set()); // posts gerando conteúdo agora
+
+  // "Gerar conteúdo" de um post só (ex.: demanda que veio do Backlog depois do calendário pronto)
+  async function generateOne(entry) {
+    const filled = entry.brief && (entry.brief.piece_text || entry.brief.important_notes || entry.brief.must_have);
+    if (filled && !confirm("Este post já tem conteúdo no briefing. Gerar de novo e substituir?")) return;
+    setGenerating((s) => new Set(s).add(entry.id));
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch("/api/content-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
+        body: JSON.stringify({ mode: "entry", client_id: client.id, entry_id: entry.id })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(json.error || "Não consegui gerar o conteúdo agora.");
+        return;
+      }
+      addLocal(json.atualizados || []);
+      showToast(entry.card_id ? "Conteúdo gerado — também foi para as observações da peça." : "Conteúdo gerado. Abra o post para revisar o briefing.");
+    } catch (err) {
+      console.error(err);
+      showToast("Não consegui falar com o servidor. Confira a internet e tente de novo.");
+    } finally {
+      setGenerating((s) => {
+        const next = new Set(s);
+        next.delete(entry.id);
+        return next;
+      });
+    }
+  }
   const [clearWeek, setClearWeek] = useState(null); // semana aberta no "Limpar semana"
   const [busy, setBusy] = useState(false);
 
@@ -209,7 +241,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                     );
                   })}
                   <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
-                    ✨ Criar temas
+                    ✨ Gerar conteúdo
                   </button>
                   <button
                     className="btn btn-plain danger week-clear"
@@ -248,20 +280,41 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                       return (
                         <div key={entry.id} className="week-entry">
                           <EntryChip entry={entry} onClick={isStaff ? () => setEditing({ entry }) : null} />
-                          {isStaff &&
-                            (card ? (
-                              <span className="week-status" style={{ borderColor: (COLUMNS[COL_INDEX[card.column_id]] || {}).color }}>
-                                {(COLUMNS[COL_INDEX[card.column_id]] || { name: "Em estruturação" }).name}
-                              </span>
-                            ) : (
+                          {isStaff && (
+                            <div className="week-entry-actions">
                               <button
-                                className="btn btn-plain week-send"
-                                disabled={!entry.theme}
-                                onClick={() => toProduction(entry).then((ok) => ok && showToast("Peça criada em “Em estruturação”."))}
+                                className="btn btn-plain week-gen"
+                                disabled={!entry.theme || generating.has(entry.id) || (entry.brief_status && entry.brief_status !== "rascunho")}
+                                title={
+                                  entry.brief_status && entry.brief_status !== "rascunho"
+                                    ? "O briefing já está pronto ou enviado ao design"
+                                    : "Gerar o conteúdo só deste post"
+                                }
+                                onClick={() => generateOne(entry)}
                               >
-                                Criar peça →
+                                {generating.has(entry.id) ? (
+                                  <>
+                                    <span className="spinner small" aria-hidden="true"></span> Gerando…
+                                  </>
+                                ) : (
+                                  "✨ Gerar conteúdo"
+                                )}
                               </button>
-                            ))}
+                              {card ? (
+                                <span className="week-status" style={{ borderColor: (COLUMNS[COL_INDEX[card.column_id]] || {}).color }}>
+                                  {(COLUMNS[COL_INDEX[card.column_id]] || { name: "Em estruturação" }).name}
+                                </span>
+                              ) : (
+                                <button
+                                  className="btn btn-plain week-send"
+                                  disabled={!entry.theme}
+                                  onClick={() => toProduction(entry).then((ok) => ok && showToast("Peça criada em “Em estruturação”."))}
+                                >
+                                  Criar peça →
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
