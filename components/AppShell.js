@@ -48,7 +48,7 @@ const SECTIONS = {
   cliente: [
     { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os posts planejados para esta semana." },
     { id: "calendario", title: "Calendário mensal", icon: "🗓️", text: "Veja os temas planejados para o mês." },
-    { id: "producao", title: "Aprovações", icon: "✅", text: "Aprove, reprove e deixe observações nos conteúdos." }
+    { id: "producao", title: "Solicitações e aprovações", icon: "✅", text: "Peça demandas novas no Backlog, aprove, reprove e deixe observações nos conteúdos." }
   ]
 };
 

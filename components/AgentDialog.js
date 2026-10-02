@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { rangeLabel } from "../lib/deadlines";
 
-// Janela do botão "Criar temas com IA": a equipe dá orientações opcionais e o agente
+// Janela do botão "Criar temas": a equipe dá orientações opcionais e o agente
 // de conteúdo cria os temas da semana (com briefing), marcados para revisão.
 export default function AgentDialog({ client, weekStart, weekEnd, existingCount, onClose, onCreated, showToast }) {
   const [guidance, setGuidance] = useState("");
@@ -56,7 +56,7 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
       <form className="modal modal-sm" onSubmit={run}>
         <div className="modal-head">
           <div style={{ flex: 1 }}>
-            <h3 className="entry-title">✨ Criar temas com IA</h3>
+            <h3 className="entry-title">✨ Criar temas</h3>
             <div className="entry-date">
               {client.name} · posts de {rangeLabel(weekStart, weekEnd)}
             </div>

@@ -18,7 +18,7 @@ function getRecognizer() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
-// "Criar calendário com IA": o agente monta os temas do mês seguindo a estratégia escolhida.
+// "Criar calendário": o agente monta os temas do mês seguindo a estratégia escolhida.
 export default function MonthAgentDialog({ client, year, month, existingCount, initialSource, onClose, onCreated, showToast }) {
   const [source, setSource] = useState(initialSource || "perfil");
   const [extra, setExtra] = useState(""); // orientação opcional no modo automático
@@ -131,7 +131,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
       <form className="modal modal-md" onSubmit={run}>
         <div className="modal-head">
           <div style={{ flex: 1 }}>
-            <h3 className="entry-title">✨ Criar calendário com IA</h3>
+            <h3 className="entry-title">✨ Criar calendário</h3>
             <div className="entry-date">
               {client.name} · {monthName}
             </div>
@@ -205,7 +205,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
                     ))}
                   </div>
                   {filled.length === 0 ? (
-                    <div className="hint warn">O perfil está vazio: o agente vai depender só dos meses anteriores. Preencha o Perfil do cliente (ou use “Preencher com IA”) para um calendário mais certeiro.</div>
+                    <div className="hint warn">O perfil está vazio: o agente vai depender só dos meses anteriores. Preencha o Perfil do cliente (ou use “Preencher automaticamente”) para um calendário mais certeiro.</div>
                   ) : (
                     missing.length > 0 && <div className="hint">Campos vazios ({missing.map((f) => f.label).join(", ")}) o agente deduz pelo restante do perfil.</div>
                   )}

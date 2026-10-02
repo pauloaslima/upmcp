@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
 import { cardDue, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/deadlines";
-import { openAttachment, uploadFile } from "../lib/files";
+import { openAttachment, removeFile, uploadFile } from "../lib/files";
 
 export function initials(person) {
   const name = (person?.full_name || person?.email || "?").trim();
@@ -163,7 +163,7 @@ export default function Board({ client, isStaff, team = [], showToast }) {
     <div className="board-page">
       <div className="toolbar">
         <input type="search" placeholder="Buscar peça…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        {isStaff && (
+        {isStaff ? (
           <button
             className="btn btn-gold"
             onClick={async () => {
@@ -172,6 +172,10 @@ export default function Board({ client, isStaff, team = [], showToast }) {
             }}
           >
             + Nova peça
+          </button>
+        ) : (
+          <button className="btn btn-gold" onClick={() => setOpenId("__nova__")}>
+            + Nova solicitação
           </button>
         )}
       </div>
@@ -186,10 +190,16 @@ export default function Board({ client, isStaff, team = [], showToast }) {
               isStaff={isStaff}
               people={people}
               onOpen={(id) => setOpenId(id)}
-              onAdd={async () => {
-                const card = await createCard(col.id);
-                if (card) setOpenId(card.id);
-              }}
+              onAdd={
+                isStaff
+                  ? async () => {
+                      const card = await createCard(col.id);
+                      if (card) setOpenId(card.id);
+                    }
+                  : col.id === "backlog"
+                    ? () => setOpenId("__nova__")
+                    : null
+              }
               onDrop={(id) => moveCard(id, col.id)}
               dragCardId={dragCardId}
             />
@@ -197,7 +207,24 @@ export default function Board({ client, isStaff, team = [], showToast }) {
         </div>
       </div>
 
+      {!isStaff && (openId === "__nova__" || (openCard && openCard.column_id === "backlog")) && (
+        <RequestModal
+          card={openId === "__nova__" ? null : openCard}
+          onClose={() => setOpenId(null)}
+          onSaved={(row) => setCards((prev) => ({ ...prev, [row.id]: row }))}
+          onDeleted={(id) =>
+            setCards((prev) => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            })
+          }
+          showToast={showToast}
+        />
+      )}
+
       {openCard &&
+        (isStaff || openCard.column_id !== "backlog") &&
         (isStaff ? (
           <CardModal
             card={openCard}
@@ -248,11 +275,184 @@ function ColumnView({ col, cards, isStaff, people, onOpen, onAdd, onDrop, dragCa
           <CardTile key={card.id} card={card} isStaff={isStaff} assignee={people[card.assignee_id]} onOpen={onOpen} dragCardId={dragCardId} />
         ))}
       </div>
-      {isStaff && (
+      {onAdd && (
         <button className="col-add" onClick={onAdd}>
-          + adicionar peça
+          {!isStaff ? "+ nova solicitação" : col.id === "backlog" ? "+ adicionar demanda" : "+ adicionar peça"}
         </button>
       )}
+    </div>
+  );
+}
+
+const REQUEST_FORMATS = ["Reels", "Carrossel", "Estático", "Story", "Vídeo", "Outro"];
+
+// Cliente pede uma demanda nova (coluna Backlog) ou ajusta a que ainda está no backlog.
+function RequestModal({ card, onClose, onSaved, onDeleted, showToast }) {
+  const [values, setValues] = useState({
+    title: card?.title || "",
+    details: card?.copy || "",
+    format: card && card.format !== "Outro" ? card.format : "",
+    date: card?.publish_date || ""
+  });
+  const [attachments, setAttachments] = useState(card?.attachments || []);
+  const [pendingFiles, setPendingFiles] = useState([]); // escolhidos antes de a solicitação existir
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+  const set = (k) => ({ value: values[k], onChange: (e) => setValues((v) => ({ ...v, [k]: e.target.value })) });
+
+  async function reload(id) {
+    const { data } = await supabase.from("cards").select("*").eq("id", id).maybeSingle();
+    if (data) onSaved(data);
+    return data;
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    if (!values.title.trim()) {
+      showToast("Escreva o que você precisa.");
+      return;
+    }
+    setBusy(true);
+    try {
+      let id = card?.id;
+      if (!id) {
+        const { data, error } = await supabase.rpc("client_create_request", {
+          p_title: values.title,
+          p_details: values.details,
+          p_format: values.format,
+          p_desired_date: values.date || null
+        });
+        if (error) throw error;
+        id = data;
+      }
+      // arquivos escolhidos agora vão para a pasta da solicitação
+      const uploaded = [];
+      for (const f of pendingFiles) uploaded.push(await uploadFile(id, f));
+      const { error: upErr } = await supabase.rpc("client_update_request", {
+        p_card: id,
+        p_title: values.title,
+        p_details: values.details,
+        p_format: values.format,
+        p_desired_date: values.date || null,
+        p_attachments: [...attachments, ...uploaded]
+      });
+      if (upErr) throw upErr;
+      await reload(id);
+      showToast(card ? "Solicitação atualizada." : "Solicitação enviada para a equipe da Up!.");
+      onClose();
+    } catch (err) {
+      console.error(err);
+      showToast(card ? "Não consegui salvar. Se a equipe já começou, a solicitação não pode mais ser alterada." : "Não consegui enviar a solicitação.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeRequest() {
+    if (!confirm("Apagar esta solicitação?")) return;
+    const { error } = await supabase.rpc("client_delete_request", { p_card: card.id });
+    if (error) {
+      showToast("Não consegui apagar. Se a equipe já começou, fale com ela pelas observações.");
+      return;
+    }
+    attachments.forEach(removeFile);
+    onDeleted(card.id);
+    showToast("Solicitação apagada.");
+    onClose();
+  }
+
+  return (
+    <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && !busy && onClose()}>
+      <form className="modal modal-sm" onSubmit={save}>
+        <div className="modal-head">
+          <div style={{ flex: 1 }}>
+            <h3 className="entry-title">{card ? "Sua solicitação" : "Nova solicitação"}</h3>
+            <div className="entry-date">A equipe da Up! recebe o pedido na coluna Backlog.</div>
+          </div>
+          <button type="button" className="icon-btn" title="Fechar" onClick={onClose} disabled={busy}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          <div>
+            <label htmlFor="rq-title">O que você precisa?</label>
+            <input id="rq-title" type="text" required maxLength={200} {...set("title")} placeholder="Ex.: Post sobre a promoção de inverno" />
+          </div>
+          <div>
+            <label htmlFor="rq-details">Detalhes</label>
+            <textarea
+              id="rq-details"
+              rows={5}
+              {...set("details")}
+              placeholder="Explique a ideia, o texto que precisa aparecer, o objetivo, o público… Quanto mais detalhes, melhor."
+            />
+          </div>
+          <div className="field-row">
+            <div>
+              <label htmlFor="rq-format">Formato</label>
+              <select id="rq-format" {...set("format")}>
+                <option value="">A equipe sugere</option>
+                {REQUEST_FORMATS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="rq-date">Para quando? (opcional)</label>
+              <input id="rq-date" type="date" {...set("date")} />
+            </div>
+          </div>
+          <div>
+            <label>Arquivos e referências (opcional)</label>
+            <AttachmentList
+              attachments={[...attachments, ...pendingFiles.map((f) => ({ type: "pending", name: f.name }))]}
+              showToast={showToast}
+              onRemove={(idx) => {
+                if (idx < attachments.length) setAttachments((a) => a.filter((_, i) => i !== idx));
+                else setPendingFiles((p) => p.filter((_, i) => i !== idx - attachments.length));
+              }}
+            />
+            <div className="attach-row" style={{ marginTop: 6 }}>
+              <button type="button" className="file-btn" onClick={() => fileRef.current?.click()} disabled={busy}>
+                📎 Anexar arquivos
+              </button>
+              <input
+                type="file"
+                multiple
+                hidden
+                ref={fileRef}
+                onChange={(e) => {
+                  const list = [...e.target.files];
+                  e.target.value = "";
+                  setPendingFiles((p) => [...p, ...list]);
+                }}
+              />
+            </div>
+          </div>
+
+          {card && <CardComments cardId={card.id} showToast={showToast} />}
+
+          <div className="modal-footer">
+            {card ? (
+              <button type="button" className="btn btn-danger" onClick={removeRequest} disabled={busy}>
+                Apagar solicitação
+              </button>
+            ) : (
+              <span></span>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn btn-plain" onClick={onClose} disabled={busy}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-gold" disabled={busy}>
+                {busy ? "Enviando…" : card ? "Salvar" : "Enviar solicitação"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }
@@ -281,6 +481,7 @@ function CardTile({ card, isStaff, assignee, onOpen, dragCardId }) {
       <div className="card-tags">
         {card.format && <span className="tag tag-format">{card.format}</span>}
         {isStaff && card.sensitive && <span className="tag tag-sensitive">sensível</span>}
+        {isStaff && card.requested_by && <span className="tag tag-request">pedido do cliente</span>}
         {deadline && (
           <span className={"chip st-" + deadline.status.id} title={deadline.label}>
             prazo {shortDate(deadline.due)}
@@ -318,18 +519,24 @@ export function AttachmentList({ attachments, onRemove, showToast }) {
     <div className="attach-list">
       {attachments.map((att, idx) => (
         <div className="attach-item" key={idx}>
-          <span>{att.type === "upload" ? "🗂️" : "🔗"}</span>
-          <a
-            href={att.type === "upload" ? "#" : att.url}
-            onClick={(e) => {
-              e.preventDefault();
-              openAttachment(att, showToast);
-            }}
-          >
-            {att.name || att.url}
-          </a>
+          <span>{att.type === "link" ? "🔗" : "🗂️"}</span>
+          {att.type === "pending" ? (
+            <span className="name">
+              {att.name} <small className="hint">(vai junto ao enviar)</small>
+            </span>
+          ) : (
+            <a
+              href={att.type === "upload" ? "#" : att.url}
+              onClick={(e) => {
+                e.preventDefault();
+                openAttachment(att, showToast);
+              }}
+            >
+              {att.name || att.url}
+            </a>
+          )}
           {onRemove && (
-            <button className="attach-remove" title="Remover" onClick={() => onRemove(idx)}>
+            <button type="button" className="attach-remove" title="Remover" onClick={() => onRemove(idx)}>
               ✕
             </button>
           )}
@@ -600,6 +807,12 @@ function CardModal({ card, onClose, onSave, onDelete, showToast, team }) {
           </button>
         </div>
         <div className="modal-body">
+          {local.requested_by && (
+            <div className="agent-plan">
+              <strong>Pedido do cliente.</strong> O que ele escreveu está em “Copy / legenda” e os arquivos que mandou, em “Arquivos anexados”.
+              {local.column_id === "backlog" && " Para começar, mude a etapa para “Em estruturação”."}
+            </div>
+          )}
           <div>
             <label>Etapa</label>
             <select

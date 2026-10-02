@@ -74,14 +74,14 @@ Content-Type: application/json
 
 ## Já pronto no sistema
 
-### Botão "✨ Criar temas com IA" (Conteúdo da semana)
+### Botão "✨ Criar temas" (Conteúdo da semana)
 
 Em cada semana, a equipe clica, escreve orientações opcionais e escolhe quantos posts. Se o calendário mensal já tem temas nessa semana, o agente **desenvolve esses temas** (briefing, texto da peça) em vez de criar outros; só cria posts novos se pedirem mais do que os já planejados. Temas com briefing pronto ou enviado não são alterados.
 O servidor (`/api/content-agent`) chama o Claude (modelo `claude-opus-5-5`) com o perfil do cliente,
 as datas da semana e os temas recentes, e grava os temas com briefing. Precisa da variável
 `ANTHROPIC_API_KEY` no Vercel (chave criada em console.anthropic.com, com créditos).
 
-### Botão "✨ Criar calendário com IA" (Calendário mensal)
+### Botão "✨ Criar calendário" (Calendário mensal)
 
 Monta os temas do mês inteiro. Modo padrão **Automático**: lê o Perfil do cliente (posicionamento, público, tom, linhas editoriais, identidade, referências, observações), analisa os últimos 3 meses e monta o mês seguindo as linhas editoriais e seus pesos; quando o mês está vazio, o calendário mostra o botão "Criar automaticamente". Outras fontes de estratégia: **meses anteriores** (o agente deduz a linha dos últimos 3 meses), **texto** (a equipe escreve a estratégia) ou **áudio** (ditado pelo navegador, Chrome/Edge, que vira texto para revisar). Os temas já existentes no mês ficam como estão. No calendário, os temas podem ser arrastados entre os dias.
 

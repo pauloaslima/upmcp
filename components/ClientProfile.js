@@ -16,7 +16,7 @@ function allMaterials(client) {
 
 // Perfil do cliente: base que a equipe e os agentes (conteúdo e design) consultam.
 // Abre só para leitura. Para mudar: "Editar" → alterar → "Salvar alterações" (pede confirmação).
-// "✨ Preencher com IA" lê os materiais e sugere os campos; a equipe escolhe o que aceitar e confirma.
+// "✨ Preencher automaticamente" lê os materiais e sugere os campos; a equipe escolhe o que aceitar e confirma.
 export function ClientProfile({ client, showToast, onSaved }) {
   const fromClient = () => ({
     ...Object.fromEntries(FIELD_KEYS.map((k) => [k, client[k] || ""])),
@@ -159,7 +159,7 @@ export function ClientProfile({ client, showToast, onSaved }) {
         {!editing ? (
           <div className="profile-actions">
             <button className="btn btn-plain ai-btn" onClick={runAi} disabled={ai?.loading}>
-              ✨ Preencher com IA
+              ✨ Preencher automaticamente
             </button>
             <button className="btn btn-gold" onClick={() => startEdit()}>
               Editar
@@ -271,7 +271,7 @@ export function ClientProfile({ client, showToast, onSaved }) {
   );
 }
 
-// Painel das sugestões da IA: cada campo com o texto atual, a sugestão (editável) e de onde veio
+// Painel das sugestões: cada campo com o texto atual, a sugestão (editável) e de onde veio
 function AiPanel({ ai, setAi, client, elapsed, onApply }) {
   if (ai.loading) {
     return (
@@ -299,7 +299,7 @@ function AiPanel({ ai, setAi, client, elapsed, onApply }) {
   return (
     <div className="ai-panel">
       <div className="ai-panel-head">
-        <strong>✨ Sugestões da IA</strong>
+        <strong>✨ Sugestões</strong>
         <span className="hint">
           {result.lidos.length} material(is) lido(s). Marque o que quer usar; nada é salvo sem a sua confirmação.
         </span>

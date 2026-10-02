@@ -3,7 +3,7 @@ import { ContentAgentError } from "../../../lib/contentAgent";
 import { materialsToBlocks } from "../../../lib/materials";
 import { suggestProfile } from "../../../lib/profileAgent";
 
-// "✨ Preencher com IA" no Perfil do cliente: lê os materiais e devolve sugestões
+// "✨ Preencher automaticamente" no Perfil do cliente: lê os materiais e devolve sugestões
 // para cada campo. Não salva nada — a equipe escolhe o que aceitar e confirma.
 // POST { client_id }
 
@@ -34,6 +34,6 @@ export async function POST(request) {
   } catch (err) {
     if (err instanceof ContentAgentError) return Response.json({ error: err.message, ignorados: skipped }, { status: 502 });
     console.error(err);
-    return Response.json({ error: "Não consegui falar com a IA agora." }, { status: 502 });
+    return Response.json({ error: "Não consegui gerar agora. Tente de novo em instantes." }, { status: 502 });
   }
 }

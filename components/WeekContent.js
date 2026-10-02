@@ -43,7 +43,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
   const tasks = useClientTasks(isStaff ? client.id : false, iso(addDays(parse(first), -1)), showToast);
   const [cards, setCards] = useState({});
   const [editing, setEditing] = useState(null);
-  const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Criar temas com IA"
+  const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Criar temas"
   const [clearWeek, setClearWeek] = useState(null); // semana aberta no "Limpar semana"
   const [busy, setBusy] = useState(false);
 
@@ -209,7 +209,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                     );
                   })}
                   <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
-                    ✨ Criar temas com IA
+                    ✨ Criar temas
                   </button>
                   <button
                     className="btn btn-plain danger week-clear"

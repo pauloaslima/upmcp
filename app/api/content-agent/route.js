@@ -14,7 +14,7 @@ import { PROFILE_FIELDS } from "../../../lib/profileFields";
 //          → cria o calendário de temas do mês em volta do que já existe
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // a IA pode levar alguns minutos
+export const maxDuration = 300; // a geração pode levar alguns minutos
 
 const ENTRY_FIELDS = "id, day, format, theme, post_time, notes, brief, brief_status, created_by_agent";
 
@@ -38,7 +38,7 @@ export async function POST(request) {
   } catch (err) {
     if (err instanceof ContentAgentError) return Response.json({ error: err.message }, { status: 502 });
     console.error(err);
-    return Response.json({ error: "Não consegui falar com a IA agora." }, { status: 502 });
+    return Response.json({ error: "Não consegui gerar agora. Tente de novo em instantes." }, { status: 502 });
   }
 }
 
@@ -92,7 +92,7 @@ async function runWeek(db, client, body) {
   }
 
   if (!updated.length && !created.length) {
-    return Response.json({ error: "A IA não devolveu nenhum tema para essa semana. Tente com outra orientação." }, { status: 422 });
+    return Response.json({ error: "Nenhum tema foi gerado para essa semana. Tente com outra orientação." }, { status: 422 });
   }
   return Response.json({ ok: true, resumo: result.resumo, atualizados: updated, criados: created });
 }
@@ -127,7 +127,7 @@ async function runMonth(db, client, body) {
   }
   if (source === "perfil" && !(history || []).length && !PROFILE_FIELDS.some((f) => (client[f.key] || "").trim())) {
     return Response.json(
-      { error: "O Perfil do cliente está vazio e não há meses anteriores. Preencha o perfil (ou use “Preencher com IA” com os materiais) antes de criar." },
+      { error: "O Perfil do cliente está vazio e não há meses anteriores. Preencha o perfil (ou use “Preencher automaticamente” com os materiais) antes de criar." },
       { status: 400 }
     );
   }
@@ -148,7 +148,7 @@ async function runMonth(db, client, body) {
   const result = await generateMonth({ context, month, source, strategy, history: history || [], existing: existing || [], postsPerWeek });
 
   const { rows } = cleanAgentEntries(client.id, result.temas);
-  if (!rows.length) return Response.json({ error: "A IA não sugeriu temas para esse mês. Tente com outra estratégia." }, { status: 422 });
+  if (!rows.length) return Response.json({ error: "Nenhum tema foi gerado para esse mês. Tente com outra estratégia." }, { status: 422 });
   const { data: created, error } = await db.from("calendar_entries").insert(rows).select("*");
   if (error) {
     console.error(error);

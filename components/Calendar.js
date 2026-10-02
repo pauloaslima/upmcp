@@ -71,7 +71,7 @@ export function EntryChip({ entry, onClick, dragProps }) {
   );
 }
 
-// onMove(entry, novoDia): arrastar um tema para outro dia. onAi: abre o "Criar calendário com IA".
+// onMove(entry, novoDia): arrastar um tema para outro dia. onAi: abre o "Criar calendário".
 // onClear: abre o "Limpar mês".
 export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi, onClear }) {
   const [editing, setEditing] = useState(null); // { day } para novo, { entry } para existente
@@ -103,7 +103,7 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
         <div className="cal-toolbar">
           {onAi && (
             <button className="btn btn-gold" onClick={() => onAi()}>
-              ✨ Criar calendário com IA
+              ✨ Criar calendário
             </button>
           )}
           {onClear && (
