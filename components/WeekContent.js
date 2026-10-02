@@ -43,10 +43,19 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
   const tasks = useClientTasks(isStaff ? client.id : false, iso(addDays(parse(first), -1)), showToast);
   const [cards, setCards] = useState({});
   const [editing, setEditing] = useState(null);
-  const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Gerar conteúdo"
+  const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Criar semana"
   const [generating, setGenerating] = useState(() => new Set()); // posts gerando conteúdo agora
 
-  // "Gerar conteúdo" de um post só (ex.: demanda que veio do Backlog depois do calendário pronto)
+  // 🗑 de cada post: exclui o tema do calendário (a peça ligada a ele, se houver, continua na produção)
+  async function deleteOne(entry) {
+    const msg = entry.card_id
+      ? `Excluir “${entry.theme}” do calendário?\n\nA peça ligada a este post continua na linha de produção.`
+      : `Excluir “${entry.theme}” do calendário?`;
+    if (!confirm(msg)) return;
+    await removeMany([entry]);
+  }
+
+  // "✨ Gerar" de um post só (ex.: demanda que veio do Backlog depois do calendário pronto)
   async function generateOne(entry) {
     const filled = entry.brief && (entry.brief.piece_text || entry.brief.important_notes || entry.brief.must_have);
     if (filled && !confirm("Este post já tem conteúdo no briefing. Gerar de novo e substituir?")) return;
@@ -241,7 +250,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                     );
                   })}
                   <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
-                    ✨ Gerar conteúdo
+                    ✨ Criar semana
                   </button>
                   <button
                     className="btn btn-plain danger week-clear"
@@ -282,24 +291,6 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                           <EntryChip entry={entry} onClick={isStaff ? () => setEditing({ entry }) : null} />
                           {isStaff && (
                             <div className="week-entry-actions">
-                              <button
-                                className="btn btn-plain week-gen"
-                                disabled={!entry.theme || generating.has(entry.id) || (entry.brief_status && entry.brief_status !== "rascunho")}
-                                title={
-                                  entry.brief_status && entry.brief_status !== "rascunho"
-                                    ? "O briefing já está pronto ou enviado ao design"
-                                    : "Gerar o conteúdo só deste post"
-                                }
-                                onClick={() => generateOne(entry)}
-                              >
-                                {generating.has(entry.id) ? (
-                                  <>
-                                    <span className="spinner small" aria-hidden="true"></span> Gerando…
-                                  </>
-                                ) : (
-                                  "✨ Gerar conteúdo"
-                                )}
-                              </button>
                               {card ? (
                                 <span className="week-status" style={{ borderColor: (COLUMNS[COL_INDEX[card.column_id]] || {}).color }}>
                                   {(COLUMNS[COL_INDEX[card.column_id]] || { name: "Em estruturação" }).name}
@@ -313,6 +304,37 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                                   Criar peça →
                                 </button>
                               )}
+                              <span className="week-mini">
+                                <button
+                                  type="button"
+                                  className="mini-link"
+                                  disabled={!entry.theme || generating.has(entry.id) || (entry.brief_status && entry.brief_status !== "rascunho")}
+                                  title={
+                                    entry.brief_status && entry.brief_status !== "rascunho"
+                                      ? "O briefing já está pronto ou enviado ao design"
+                                      : "Gerar o conteúdo só deste post"
+                                  }
+                                  onClick={() => generateOne(entry)}
+                                >
+                                  {generating.has(entry.id) ? (
+                                    <>
+                                      <span className="spinner small" aria-hidden="true"></span> gerando…
+                                    </>
+                                  ) : (
+                                    "✨ Gerar"
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="mini-link danger"
+                                  title="Excluir este conteúdo"
+                                  aria-label={"Excluir " + entry.theme}
+                                  disabled={generating.has(entry.id)}
+                                  onClick={() => deleteOne(entry)}
+                                >
+                                  🗑
+                                </button>
+                              </span>
                             </div>
                           )}
                         </div>

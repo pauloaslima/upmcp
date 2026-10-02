@@ -74,7 +74,7 @@ Content-Type: application/json
 
 ## Já pronto no sistema
 
-### Botão "✨ Gerar conteúdo" (Conteúdo da semana: a semana inteira ou um post só)
+### Botões "✨ Criar semana" (semana inteira) e "✨ Gerar" (um post só) no Conteúdo da semana
 
 Em cada semana, a equipe clica, escreve orientações opcionais e escolhe quantos posts. Se o calendário mensal já tem temas nessa semana, o agente **desenvolve esses temas** (briefing, texto da peça) em vez de criar outros; só cria posts novos se pedirem mais do que os já planejados. Temas com briefing pronto ou enviado não são alterados.
 O servidor (`/api/content-agent`) chama o Claude (modelo `claude-opus-5-5`) com o perfil do cliente,
