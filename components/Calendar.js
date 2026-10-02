@@ -7,6 +7,7 @@ import { normalizeLink, removeFile, uploadFile } from "../lib/files";
 import { AttachmentList } from "./Board";
 import { brandFiles } from "../lib/profileFields";
 import { asText, asTitle } from "../lib/text";
+import { editorialOptions, lineStyle } from "../lib/editorial";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -43,11 +44,16 @@ export function EntryChip({ entry, onClick, dragProps, forClient = false }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag className={"cal-entry" + (onClick ? "" : " readonly") + (dragProps ? " draggable" : "")} onClick={onClick || undefined} {...(dragProps || {})}>
-      {(entry.format || entry.post_time) && (
+      {(entry.format || entry.post_time || entry.editorial_line) && (
         <span className="cal-entry-top">
           {entry.format && (
             <span className="cal-format" style={formatStyle(entry.format)}>
               {entry.format}
+            </span>
+          )}
+          {entry.editorial_line && (
+            <span className="cal-line" style={lineStyle(entry.editorial_line)} title="Linha editorial">
+              {entry.editorial_line}
             </span>
           )}
           {entry.post_time && <span className="cal-time">{entry.post_time}</span>}
@@ -261,6 +267,7 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
 export function EntryEditor({ day, entry, specials, client, showToast, onClose, onSave, onDelete }) {
   const [values, setValues] = useState({
     format: entry?.format || "",
+    editorial_line: entry?.editorial_line || "",
     theme: entry?.theme || "",
     post_time: entry?.post_time || "",
     notes: entry?.notes || "",
@@ -354,6 +361,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     uploadedNow.current = [];
     await onSave({
       format: values.format,
+      editorial_line: asTitle(values.editorial_line.trim()).slice(0, 60),
       theme: asTitle(values.theme.trim()),
       post_time: values.post_time.trim(),
       notes: asText(values.notes.trim()),
@@ -433,10 +441,36 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
             />
           </div>
 
-          <div>
-            <label htmlFor="entry-time">Horário</label>
-            <input id="entry-time" type="text" {...set("post_time")} placeholder="Ex.: 12h" />
+          <div className="field-row">
+            <div>
+              <label htmlFor="entry-line">Linha editorial</label>
+              <input id="entry-line" type="text" list="entry-line-options" maxLength={60} {...set("editorial_line")} placeholder="Escolha ou escreva" />
+              <datalist id="entry-line-options">
+                {editorialOptions(client).map((l) => (
+                  <option key={l} value={l} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label htmlFor="entry-time">Horário</label>
+              <input id="entry-time" type="text" {...set("post_time")} placeholder="Ex.: 12h" />
+            </div>
           </div>
+          {editorialOptions(client).length > 0 && (
+            <div className="line-picker">
+              {editorialOptions(client).map((l) => (
+                <button
+                  type="button"
+                  key={l}
+                  className={"line-chip" + (values.editorial_line === l ? " on" : "")}
+                  style={values.editorial_line === l ? lineStyle(l) : undefined}
+                  onClick={() => setValues((v) => ({ ...v, editorial_line: v.editorial_line === l ? "" : l }))}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div>
             <label htmlFor="entry-notes">Observações</label>

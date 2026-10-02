@@ -19,7 +19,7 @@ import { briefDescription, briefWithDefaults } from "../../../lib/brief";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // a geração pode levar alguns minutos
 
-const ENTRY_FIELDS = "id, day, format, theme, post_time, notes, brief, brief_status, created_by_agent";
+const ENTRY_FIELDS = "id, day, format, theme, post_time, notes, editorial_line, brief, brief_status, created_by_agent";
 
 export async function POST(request) {
   const db = agentDb();
@@ -95,7 +95,8 @@ async function applyDeveloped(db, client, planned, desenvolvidos) {
       day: original.day,
       format: original.format || d.format,
       post_time: original.post_time || d.post_time,
-      notes: original.notes || d.notes
+      notes: original.notes || d.notes,
+      editorial_line: original.editorial_line || d.editorial_line
     };
     const { rows } = cleanAgentEntries(client.id, [merged]);
     if (!rows.length) continue;
@@ -167,7 +168,7 @@ async function runMonth(db, client, body) {
     db.from("calendar_entries").select("day, format, theme, post_time").eq("client_id", client.id).gte("day", inicio).lte("day", fim).order("day"),
     db
       .from("calendar_entries")
-      .select("day, format, theme, post_time")
+      .select("day, format, theme, post_time, editorial_line")
       .eq("client_id", client.id)
       .gte("day", iso(new Date(y, m - 4, 1)))
       .lt("day", inicio)
