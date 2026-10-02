@@ -145,7 +145,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
           {result ? (
             <>
               <div className="agent-done">
-                <strong>{result.criados.length} tema(s) criados</strong> em {monthName}, marcados como “sugerido pelo agente”.
+                <strong>{result.criados.length} tema(s) criados</strong> em {monthName}, marcados como “Conteúdo criado”.
                 {result.resumo && <p>{result.resumo}</p>}
               </div>
               <ul className="agent-list">
@@ -193,13 +193,13 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
                 <>
                   <p className="agent-intro">
                     O agente <strong>lê o Perfil do cliente</strong> para entender o que ele faz, para quem e como fala;{" "}
-                    <strong>analisa os calendários dos últimos 3 meses</strong> (se houver) — frequência, formatos e pilares que ficaram de fora — e
+                    <strong>analisa os calendários dos últimos 3 meses</strong> (se houver), com frequência, formatos e pilares que ficaram de fora, e
                     monta {MONTHS[month - 1].toLowerCase()} seguindo as linhas editoriais, com as datas comemorativas que fazem sentido.
                   </p>
                   <div className="profile-check">
                     {PROFILE_FIELDS.map((f) => (
                       <span key={f.key} className={"chip " + ((client[f.key] || "").trim() ? "st-feito" : "")}>
-                        {(client[f.key] || "").trim() ? "✓ " : "— "}
+                        {(client[f.key] || "").trim() ? "✓ " : "○ "}
                         {f.label}
                       </span>
                     ))}
@@ -296,7 +296,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
                 </div>
               )}
               {source !== "perfil" && !client.positioning && !client.identity && (
-                <div className="hint warn">O perfil deste cliente está vazio — preencha em “Perfil do cliente” para um calendário mais certeiro.</div>
+                <div className="hint warn">O perfil deste cliente está vazio. Preencha em “Perfil do cliente” para um calendário mais certeiro.</div>
               )}
 
               {error && <div className="login-msg error">{error}</div>}

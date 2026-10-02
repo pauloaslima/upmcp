@@ -2,7 +2,7 @@ import { agentAuthorized, agentDb, unauthorized } from "../../../../lib/agentApi
 import { cleanAgentEntries } from "../../../../lib/agentContext";
 
 // O agente de conteúdo grava os temas que criou no Conteúdo da semana do cliente.
-// Os temas entram como "sugerido pelo agente" e com briefing em rascunho, para a equipe revisar.
+// Os temas entram marcados como "Conteúdo criado" e com briefing em rascunho, para a equipe revisar.
 //
 // POST /api/agent/entries
 // { "client_id": "<id>", "entries": [ { "day": "2026-10-19", "format": "Reels", "theme": "…",

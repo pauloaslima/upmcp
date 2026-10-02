@@ -154,7 +154,7 @@ export default function RoutinesPage({ me, isAdmin, clients, team, showToast }) 
 
       {Object.entries(byPerson).map(([uid, list]) => (
         <div key={uid} className="routine-group">
-          {(who === "all" || isAdmin) && <h4>{people[uid]?.full_name || people[uid]?.email || "—"}</h4>}
+          {(who === "all" || isAdmin) && <h4>{people[uid]?.full_name || people[uid]?.email || "-"}</h4>}
           <div className="task-list">
             {list.map((r) => {
               const check = checks[r.id];
@@ -165,7 +165,7 @@ export default function RoutinesPage({ me, isAdmin, clients, team, showToast }) 
                     <div className="task-item-text">
                       <span className="task-item-title plain">
                         {r.title}
-                        {r.client_id && <> — {clientName[r.client_id]}</>}
+                        {r.client_id && <> | {clientName[r.client_id]}</>}
                       </span>
                       <div className="task-item-meta">
                         {check
@@ -216,7 +216,7 @@ function RoutineManager({ routines, clients, team, clientName, people, showToast
   }
 
   async function remove(r) {
-    if (!confirm(`Remover "${r.title}${r.client_id ? " — " + clientName[r.client_id] : ""}" da rotina de ${people[r.user_id]?.full_name || "—"}?`)) return;
+    if (!confirm(`Remover "${r.title}${r.client_id ? " | " + clientName[r.client_id] : ""}" da rotina de ${people[r.user_id]?.full_name || "-"}?`)) return;
     const { error } = await supabase.from("routines").delete().eq("id", r.id);
     if (error) return showToast("Não consegui remover.");
     onChange();
@@ -280,12 +280,12 @@ function RoutineManager({ routines, clients, team, clientName, people, showToast
         {routines.length === 0 && <div className="hint">Nenhuma ainda.</div>}
         {Object.entries(grouped).map(([uid, list]) => (
           <div key={uid} className="routine-group">
-            <h4>{people[uid]?.full_name || people[uid]?.email || "—"}</h4>
+            <h4>{people[uid]?.full_name || people[uid]?.email || "-"}</h4>
             {list.map((r) => (
               <div key={r.id} className={"routine-row" + (r.active ? "" : " inactive")}>
                 <span>
                   {r.title}
-                  {r.client_id && <> — {clientName[r.client_id]}</>}
+                  {r.client_id && <> | {clientName[r.client_id]}</>}
                   <small> · {r.weekdays.map((d) => DAYS[d]).join(", ")}</small>
                 </span>
                 <button className="btn btn-plain" onClick={() => setActive(r, !r.active)}>

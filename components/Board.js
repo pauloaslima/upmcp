@@ -557,7 +557,7 @@ function CardTile({ card, isStaff, people = {}, assignee, onOpen, dragCardId }) 
               {assignee ? initials(assignee) : "?"}
             </span>
           )}
-          {card.publish_date ? fmtDate(card.publish_date) : "—"}
+          {card.publish_date ? fmtDate(card.publish_date) : "-"}
         </span>
         {isStaff && (
           <span className="card-progress">
@@ -676,7 +676,7 @@ function CardComments({ cardId, showToast }) {
         {comments.map((c) => (
           <div key={c.id} className={"comment" + (c.author_role === "cliente" ? " from-client" : "")}>
             <div className="comment-head">
-              <strong>{c.author_name || "—"}</strong>
+              <strong>{c.author_name || "-"}</strong>
               <span className="comment-role">{c.author_role === "cliente" ? "cliente" : "equipe Up!"}</span>
               <span className="comment-date">{new Date(c.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
               {c.author_id === me && (
@@ -797,7 +797,7 @@ function ReviewModal({ card, onClose, onReview, showToast }) {
 }
 
 // Demanda (do Backlog ou pedida por alguém): mostra quem pediu e, para o responsável,
-// o botão "Recepcionar demanda" — ela sai do Backlog e entra no calendário na data de publicação.
+// o botão "Recepcionar demanda": ela sai do Backlog e entra no calendário na data de publicação.
 function ReceivePanel({ card, team, me, isAdmin, onReceived, showToast }) {
   const [busy, setBusy] = useState(false);
   const people = Object.fromEntries(team.map((p) => [p.id, p]));
@@ -816,7 +816,7 @@ function ReceivePanel({ card, team, me, isAdmin, onReceived, showToast }) {
     const { data } = await supabase.from("cards").select("*").eq("id", card.id).single();
     setBusy(false);
     if (data) onReceived(data);
-    showToast(`Demanda recepcionada — entrou no calendário em ${d}/${m}.`);
+    showToast(`Demanda recepcionada. Entrou no calendário em ${d}/${m}.`);
   }
 
   return (
@@ -825,7 +825,7 @@ function ReceivePanel({ card, team, me, isAdmin, onReceived, showToast }) {
         <strong>{requester ? `Demanda pedida por ${requester}.` : "Demanda do Backlog."}</strong>{" "}
         {card.received_at ? (
           <>
-            Recepcionada por {shortName(people[card.received_by]) || "equipe"} em {new Date(card.received_at).toLocaleDateString("pt-BR")} — está no calendário.
+            Recepcionada por {shortName(people[card.received_by]) || "equipe"} em {new Date(card.received_at).toLocaleDateString("pt-BR")}. Já está no calendário.
           </>
         ) : !card.assignee_id ? (
           "Defina o responsável abaixo; ele recepciona a demanda."
@@ -873,7 +873,7 @@ function CardModal({ card, onClose, onSave, onDelete, onReceived, showToast, tea
     const url = prompt("Cole o link do arquivo (Drive, mLabs, etc.):");
     if (!url) return;
     if (!/^https?:\/\//i.test(url)) {
-      showToast("Link inválido — use um endereço http(s) completo.");
+      showToast("Link inválido. Use um endereço http(s) completo.");
       return;
     }
     const next = [...(local.attachments || []), { type: "link", url, name: url.replace(/^https?:\/\//, "").slice(0, 40) }];
@@ -1072,7 +1072,7 @@ function CardModal({ card, onClose, onSave, onDelete, onReceived, showToast, tea
                 onSave({ sensitive: e.target.checked });
               }}
             />
-            Peça sensível (institucional, posicionamento, campanha, assunto delicado) — passa pela Joana nas duas checagens
+            Peça sensível (institucional, posicionamento, campanha, assunto delicado): passa pela Joana nas duas checagens
           </label>
 
           <div>

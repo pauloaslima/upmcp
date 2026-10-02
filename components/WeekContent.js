@@ -73,7 +73,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
         return;
       }
       addLocal(json.atualizados || []);
-      showToast(entry.card_id ? "Conteúdo gerado — também foi para as observações da peça." : "Conteúdo gerado. Abra o post para revisar o briefing.");
+      showToast(entry.card_id ? "Conteúdo gerado. Também foi para as observações da peça." : "Conteúdo gerado. Abra o post para revisar o briefing.");
     } catch (err) {
       console.error(err);
       showToast("Não consegui falar com o servidor. Confira a internet e tente de novo.");
@@ -148,10 +148,10 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
       showToast("Não consegui criar a peça.");
       return false;
     }
-    if (entry.notes) await supabase.from("card_comments").insert({ card_id: card.id, body: "Do calendário: " + entry.notes });
+    if (entry.notes) await supabase.from("card_comments").insert({ card_id: card.id, body: "Do calendário: " + entry.notes, internal: true });
     if (entry.brief && Object.keys(entry.brief).length) {
       const brief = briefWithDefaults(entry, entry.day);
-      await supabase.from("card_comments").insert({ card_id: card.id, body: "Briefing para o design:\n\n" + briefDescription(entry, brief, client.identity) });
+      await supabase.from("card_comments").insert({ card_id: card.id, body: "Briefing para o design:\n\n" + briefDescription(entry, brief, client.identity), internal: true });
       if (brief.piece_text) await supabase.from("cards").update({ copy: brief.piece_text }).eq("id", card.id);
     }
     await update(entry.id, { card_id: card.id });
@@ -283,12 +283,12 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                       )}
                     </div>
                     <SpecialDates list={special[isoDate(d)] || []} />
-                    {list.length === 0 && <div className="week-empty">—</div>}
+                    {list.length === 0 && <div className="week-empty">-</div>}
                     {list.map((entry) => {
                       const card = entry.card_id && cards[entry.card_id];
                       return (
                         <div key={entry.id} className="week-entry">
-                          <EntryChip entry={entry} onClick={isStaff ? () => setEditing({ entry }) : null} />
+                          <EntryChip entry={entry} forClient={!isStaff} onClick={isStaff ? () => setEditing({ entry }) : null} />
                           {isStaff && (
                             <div className="week-entry-actions">
                               {card ? (

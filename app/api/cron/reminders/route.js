@@ -71,10 +71,10 @@ export async function GET(request) {
       let title = "";
       if (days < 0 && LATE_ALERT_DAYS.includes(days)) {
         recipients = [responsible, ...admins];
-        title = `ATRASADO: ${task.label} — ${client.name}`;
+        title = `ATRASADO: ${task.label} | ${client.name}`;
       } else if ((isCalendar && REMINDER_DAYS.includes(days)) || (!isCalendar && days === 0)) {
         recipients = responsible ? [responsible] : admins; // sem responsável, avisa o administrador
-        title = days === 0 ? `Vence hoje: ${task.label} — ${client.name}` : `Faltam ${days} dia(s): ${task.label} — ${client.name}`;
+        title = days === 0 ? `Vence hoje: ${task.label} | ${client.name}` : `Faltam ${days} dia(s): ${task.label} | ${client.name}`;
       }
       if (!recipients.length) continue;
 
@@ -109,7 +109,7 @@ export async function GET(request) {
     if (!person) continue;
     let recipients = [];
     let title = "";
-    const name = `${card.title || "peça sem título"} — ${clientNames[card.client_id] || "sem cliente"}`;
+    const name = `${card.title || "peça sem título"} | ${clientNames[card.client_id] || "sem cliente"}`;
     if (days === 0) {
       recipients = [person];
       title = `Vence hoje: ${name}`;

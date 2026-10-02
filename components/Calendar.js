@@ -6,6 +6,7 @@ import { CALENDAR_FORMATS, formatStyle } from "../lib/pipeline";
 import { normalizeLink, removeFile, uploadFile } from "../lib/files";
 import { AttachmentList } from "./Board";
 import { brandFiles } from "../lib/profileFields";
+import { asText, asTitle } from "../lib/text";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -37,7 +38,8 @@ export function SpecialDates({ list }) {
 }
 
 // Um tema no calendário. Sem onClick, fica só para leitura (visão do cliente).
-export function EntryChip({ entry, onClick, dragProps }) {
+// forClient: esconde tudo o que é de uso interno (etiquetas, status do briefing, observações da equipe).
+export function EntryChip({ entry, onClick, dragProps, forClient = false }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag className={"cal-entry" + (onClick ? "" : " readonly") + (dragProps ? " draggable" : "")} onClick={onClick || undefined} {...(dragProps || {})}>
@@ -52,16 +54,16 @@ export function EntryChip({ entry, onClick, dragProps }) {
         </span>
       )}
       <span className="cal-theme">{entry.theme || <em>sem tema</em>}</span>
-      {entry.notes && (
+      {!forClient && entry.notes && (
         <span className="cal-note" title={entry.notes}>
           ✎ {entry.notes}
         </span>
       )}
-      {entry.created_by_agent && <span className="cal-agent">sugerido pelo agente</span>}
-      {entry.brief_status && entry.brief_status !== "rascunho" && (
+      {!forClient && entry.created_by_agent && <span className="cal-agent">conteúdo criado</span>}
+      {!forClient && entry.brief_status && entry.brief_status !== "rascunho" && (
         <span className={"cal-brief brief-" + entry.brief_status}>{BRIEF_STATUS[entry.brief_status]?.short}</span>
       )}
-      {((entry.photos || []).length > 0 || (entry.refs || []).length > 0) && (
+      {!forClient && ((entry.photos || []).length > 0 || (entry.refs || []).length > 0) && (
         <span className="cal-extras">
           {(entry.photos || []).length > 0 && <span title="Fotos">📷 {entry.photos.length}</span>}
           {(entry.refs || []).length > 0 && <span title="Referências">🔗 {entry.refs.length}</span>}
@@ -204,6 +206,7 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
                 <EntryChip
                   key={entry.id}
                   entry={entry}
+                  forClient={readOnly}
                   onClick={readOnly ? null : () => setEditing({ entry })}
                   dragProps={
                     canDrag
@@ -329,8 +332,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     const p = designerPayload({ entry: draftEntry, brief, client });
     const text =
       `${p.title}\n` +
-      `Cliente final: ${p.cliente_final}\nTipo de solicitação: ${p.tipo_de_solicitacao || "—"}\n` +
-      `Prioridade: ${p.prioridade}\nPrazo: ${p.prazo_texto || "—"}\nLabels: ${p.labels.join(", ") || "—"}\n\n` +
+      `Cliente final: ${p.cliente_final}\nTipo de solicitação: ${p.tipo_de_solicitacao || "-"}\n` +
+      `Prioridade: ${p.prioridade}\nPrazo: ${p.prazo_texto || "-"}\nLabels: ${p.labels.join(", ") || "-"}\n\n` +
       p.descricao;
     navigator.clipboard?.writeText(text).then(
       () => showToast?.("Briefing copiado. Cole no card do designer."),
@@ -351,14 +354,14 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     uploadedNow.current = [];
     await onSave({
       format: values.format,
-      theme: values.theme.trim(),
+      theme: asTitle(values.theme.trim()),
       post_time: values.post_time.trim(),
-      notes: values.notes.trim(),
+      notes: asText(values.notes.trim()),
       photos: values.photos,
       refs: values.refs,
       use_client_identity: values.use_client_identity,
       identity_notes: values.use_client_identity ? "" : values.identity_notes.trim(),
-      // salvar pela equipe = tema revisado (tira a marca "sugerido pelo agente")
+      // salvar pela equipe = tema revisado (tira a marca "conteúdo criado")
       ...(client ? { brief, brief_status: briefStatus, created_by_agent: false } : {})
     });
     setSaving(false);
@@ -425,7 +428,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
               id="entry-theme"
               ref={themeRef}
               {...set("theme")}
-              placeholder="Ex.: Educativo — Conexão — Liderança começa dentro de casa"
+              placeholder="Ex.: Educativo | Conexão | Liderança começa dentro de casa"
               rows={3}
             />
           </div>

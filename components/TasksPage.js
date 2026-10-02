@@ -120,7 +120,7 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
     }
     setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, column_id: c.column_id === "backlog" ? "estruturacao" : c.column_id, received_at: new Date().toISOString() } : c)));
     const [, m, d] = (card.publish_date || "").split("-");
-    showToast(`Demanda recepcionada — entrou no calendário em ${d}/${m}.`);
+    showToast(`Demanda recepcionada. Entrou no calendário em ${d}/${m}.`);
   }
 
   async function moveCard(card, column) {

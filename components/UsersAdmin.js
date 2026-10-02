@@ -236,7 +236,7 @@ export default function UsersAdmin({ me, clients, showToast }) {
                     ))}
                   </select>
                 ) : (
-                  <span className="user-scope">{p.role ? "vê todos os clientes" : "—"}</span>
+                  <span className="user-scope">{p.role ? "vê todos os clientes" : "-"}</span>
                 )}
                 <div className="user-actions">
                   {!self && (

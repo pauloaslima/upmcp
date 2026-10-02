@@ -4,7 +4,7 @@ import { materialsToBlocks } from "../../../lib/materials";
 import { suggestProfile } from "../../../lib/profileAgent";
 
 // "✨ Preencher automaticamente" no Perfil do cliente: lê os materiais e devolve sugestões
-// para cada campo. Não salva nada — a equipe escolhe o que aceitar e confirma.
+// para cada campo. Não salva nada: a equipe escolhe o que aceitar e confirma.
 // POST { client_id }
 
 export const dynamic = "force-dynamic";

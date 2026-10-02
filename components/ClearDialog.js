@@ -41,7 +41,7 @@ export default function ClearDialog({ title, scope, entries, onClose, onConfirm 
             <>
               <p className="agent-intro">
                 Há <strong>{entries.length} tema(s)</strong> aqui
-                {agentCount > 0 && <> — {agentCount} sugerido(s) pelo agente</>}. Escolha o que apagar para começar um planejamento novo.
+                {agentCount > 0 && <>, sendo {agentCount} marcado(s) como “Conteúdo criado”</>}. Escolha o que apagar para começar um planejamento novo.
               </p>
 
               <div className="clear-options">
@@ -55,8 +55,8 @@ export default function ClearDialog({ title, scope, entries, onClose, onConfirm 
                 <label className={"clear-option" + (which === "agente" ? " on" : "") + (agentCount ? "" : " disabled")}>
                   <input type="radio" name="clear-which" checked={which === "agente"} disabled={!agentCount} onChange={() => setWhich("agente")} />
                   <span>
-                    <strong>Só os sugeridos pelo agente</strong>
-                    <small>{agentCount ? "Mantém o que a equipe criou ou já revisou." : "Nenhum tema sugerido pelo agente aqui."}</small>
+                    <strong>Só os marcados como “Conteúdo criado”</strong>
+                    <small>{agentCount ? "Mantém o que a equipe criou ou já revisou." : "Nenhum tema marcado como “Conteúdo criado” aqui."}</small>
                   </span>
                 </label>
               </div>

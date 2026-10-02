@@ -76,7 +76,7 @@ export function ClientTeam({ client, team, isAdmin, showToast, onMembersChange }
             return (
               <div key={m.user_id} className="member-row">
                 <div>
-                  <strong>{p?.full_name || p?.email || "—"}</strong>
+                  <strong>{p?.full_name || p?.email || "-"}</strong>
                   <div className="member-fns">{fns.length ? fns.join(" · ") : "sem função definida"}</div>
                 </div>
                 {isAdmin && !m.implicit && (

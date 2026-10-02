@@ -66,7 +66,7 @@ export default function DeadlinesOverview({ clients, team, onOpenClient, showToa
             {clients.map((c) => (
               <tr key={c.id} onClick={() => onOpenClient(c.id)}>
                 <td className="ov-client">{c.name}</td>
-                <td className="ov-resp">{byId[c.responsible_id] ? shortName(byId[c.responsible_id]) : <em>—</em>}</td>
+                <td className="ov-resp">{byId[c.responsible_id] ? shortName(byId[c.responsible_id]) : <em>-</em>}</td>
                 {cols.map((t) => {
                   const st = taskStatus(t, isDone(c.id, t), todayIso);
                   return (

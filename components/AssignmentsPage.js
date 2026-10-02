@@ -45,7 +45,7 @@ export default function AssignmentsPage({ clients, team, onSetResponsible, onOpe
       </p>
       {selected && (
         <div className="assign-selected">
-          Movendo <strong>{clients.find((c) => c.id === selected)?.name}</strong> — escolha o funcionário.
+          Movendo <strong>{clients.find((c) => c.id === selected)?.name}</strong>: escolha o funcionário.
           <button className="btn btn-plain" onClick={() => setSelected(null)}>
             Cancelar
           </button>
@@ -117,7 +117,7 @@ export default function AssignmentsPage({ clients, team, onSetResponsible, onOpe
                       {others.length > 0 && (
                         <div className="assign-others">
                           também na equipe:{" "}
-                          {others.map((m) => (shortName(people[m.user_id]) || "—") + (m.role_label ? ` (${m.role_label})` : "")).join(", ")}
+                          {others.map((m) => (shortName(people[m.user_id]) || "-") + (m.role_label ? ` (${m.role_label})` : "")).join(", ")}
                         </div>
                       )}
                       <select

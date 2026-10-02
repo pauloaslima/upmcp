@@ -75,7 +75,7 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
                   {result.atualizados?.length && result.criados?.length ? " e " : ""}
                   {result.criados?.length ? `${result.criados.length} tema(s) novo(s)` : ""}
                 </strong>
-                , marcados como “sugerido pelo agente”.
+                , marcados como “Conteúdo criado”.
                 {result.resumo && <p>{result.resumo}</p>}
               </div>
               <ul className="agent-list">
@@ -109,7 +109,7 @@ export default function AgentDialog({ client, weekStart, weekEnd, existingCount,
                 <div className="hint">O calendário mensal não tem temas nesta semana: o agente cria os posts do zero.</div>
               )}
               {!client.positioning && !client.identity && (
-                <div className="hint warn">O perfil deste cliente está vazio — preencha em “Perfil do cliente” para temas mais certeiros.</div>
+                <div className="hint warn">O perfil deste cliente está vazio. Preencha em “Perfil do cliente” para temas mais certeiros.</div>
               )}
 
               <div>

@@ -141,9 +141,9 @@ async function runEntry(db, client, body) {
 
   // tema ligado a uma peça (ex.: demanda recepcionada do Backlog): o briefing vai também para a peça
   if (entry.card_id) {
-    const text = "Conteúdo gerado para o post:\n\n" + briefDescription(data, briefWithDefaults(data, data.day), client.identity);
-    const { data: comment } = await db.from("card_comments").insert({ card_id: entry.card_id, body: text }).select("id").maybeSingle();
-    if (comment) await db.from("card_comments").update({ author_name: "Up! Fluxo", author_role: "funcionario" }).eq("id", comment.id);
+    const text = "Briefing do post:\n\n" + briefDescription(data, briefWithDefaults(data, data.day), client.identity);
+    const { data: comment } = await db.from("card_comments").insert({ card_id: entry.card_id, body: text, internal: true }).select("id").maybeSingle();
+    if (comment) await db.from("card_comments").update({ author_name: "Equipe Up!", author_role: "funcionario" }).eq("id", comment.id);
   }
   return Response.json({ ok: true, resumo: result.resumo, atualizados: [data], criados: [] });
 }
