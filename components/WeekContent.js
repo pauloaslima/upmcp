@@ -85,6 +85,34 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
       });
     }
   }
+  // "✨ Gerar" de um dia vazio: cria um post só para aquele dia, já com conteúdo
+  async function generateDay(day) {
+    setGenerating((s) => new Set(s).add(day));
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch("/api/content-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
+        body: JSON.stringify({ mode: "day", client_id: client.id, day })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(json.error || "Não consegui gerar o conteúdo agora.");
+        return;
+      }
+      addLocal(json.criados || []);
+      showToast("Conteúdo criado. Abra o post para revisar o briefing.");
+    } catch (err) {
+      console.error(err);
+      showToast("Não consegui falar com o servidor. Confira a internet e tente de novo.");
+    } finally {
+      setGenerating((s) => {
+        const next = new Set(s);
+        next.delete(day);
+        return next;
+      });
+    }
+  }
   const [clearWeek, setClearWeek] = useState(null); // semana aberta no "Limpar semana"
   const [busy, setBusy] = useState(false);
 
@@ -283,7 +311,28 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                       )}
                     </div>
                     <SpecialDates list={special[isoDate(d)] || []} />
-                    {list.length === 0 && <div className="week-empty">-</div>}
+                    {list.length === 0 &&
+                      (isStaff ? (
+                        <div className="week-empty-actions">
+                          <button
+                            type="button"
+                            className="mini-link"
+                            disabled={generating.has(key)}
+                            title="Criar um post com conteúdo só para este dia"
+                            onClick={() => generateDay(key)}
+                          >
+                            {generating.has(key) ? (
+                              <>
+                                <span className="spinner small" aria-hidden="true"></span> gerando…
+                              </>
+                            ) : (
+                              "✨ Gerar"
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="week-empty">-</div>
+                      ))}
                     {list.map((entry) => {
                       const card = entry.card_id && cards[entry.card_id];
                       return (

@@ -24,3 +24,4 @@
 .mini-link.danger:hover:not(:disabled) { color: var(--terracotta); background: color-mix(in srgb, var(--terracotta) 8%, transparent); }
 .mini-link:disabled { opacity: .45; cursor: default; }
 .week-entry-actions { width: 100%; }
+.week-empty-actions { display: flex; justify-content: center; padding: 6px 0 2px; }
