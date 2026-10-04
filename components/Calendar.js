@@ -7,7 +7,8 @@ import { normalizeLink, removeFile, uploadFile } from "../lib/files";
 import { AttachmentList } from "./Board";
 import { brandFiles } from "../lib/profileFields";
 import { asText, asTitle } from "../lib/text";
-import { editorialOptions, lineStyle } from "../lib/editorial";
+import { lineStyle } from "../lib/editorial";
+import { supabase } from "../lib/supabaseClient";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -280,6 +281,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
   const [briefStatus, setBriefStatus] = useState(entry?.brief_status || "rascunho");
   const setB = (key) => ({ value: brief[key], onChange: (e) => setBrief((b) => ({ ...b, [key]: e.target.value })) });
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [newRef, setNewRef] = useState("");
   const uploadedNow = useRef([]); // fotos enviadas nesta edição (apagadas se cancelar)
@@ -346,6 +348,46 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
       () => showToast?.("Briefing copiado. Cole no card do designer."),
       () => showToast?.("Não consegui copiar.")
     );
+  }
+
+  // "✨ Gerar" do Novo tema: gera o post a partir do que já foi escrito e preenche os campos (nada é salvo antes de revisar)
+  async function generateDraft() {
+    setGenerating(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch("/api/content-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
+        body: JSON.stringify({
+          mode: "draft",
+          client_id: client.id,
+          day,
+          draft: { theme: values.theme, format: values.format, editorial_line: values.editorial_line, post_time: values.post_time, notes: values.notes }
+        })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.rascunho) {
+        showToast?.(json.error || "Não consegui gerar o conteúdo agora.");
+        return;
+      }
+      const r = json.rascunho;
+      const format = values.format || r.format;
+      setValues((v) => ({
+        ...v,
+        theme: r.theme || v.theme,
+        format,
+        editorial_line: v.editorial_line.trim() || r.editorial_line,
+        post_time: v.post_time.trim() || r.post_time,
+        notes: v.notes.trim() || r.notes
+      }));
+      setBrief(briefWithDefaults({ format, brief: r.brief }, day));
+      showToast?.("Conteúdo gerado. Revise e clique em Salvar.");
+    } catch (err) {
+      console.error(err);
+      showToast?.("Não consegui falar com o servidor. Confira a internet e tente de novo.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function submit(e) {
@@ -431,12 +473,35 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
           </div>
 
           <div>
-            <label htmlFor="entry-theme">Tema</label>
+            <div className="entry-theme-head">
+              <label htmlFor="entry-theme">Tema</label>
+              {client && !entry && (
+                <button
+                  type="button"
+                  className="mini-link"
+                  disabled={generating}
+                  title="Gerar o post a partir do que você escreveu, com as observações do cliente"
+                  onClick={generateDraft}
+                >
+                  {generating ? (
+                    <>
+                      <span className="spinner small" aria-hidden="true"></span> gerando…
+                    </>
+                  ) : (
+                    "✨ Gerar"
+                  )}
+                </button>
+              )}
+            </div>
             <textarea
               id="entry-theme"
               ref={themeRef}
               {...set("theme")}
-              placeholder="Ex.: Educativo | Conexão | Liderança começa dentro de casa"
+              placeholder={
+                client && !entry
+                  ? "Escreva a ideia do post e clique em ✨ Gerar, ou preencha tudo à mão"
+                  : "Ex.: Educativo | Conexão | Liderança começa dentro de casa"
+              }
               rows={3}
             />
           </div>
@@ -444,33 +509,13 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
           <div className="field-row">
             <div>
               <label htmlFor="entry-line">Linha editorial</label>
-              <input id="entry-line" type="text" list="entry-line-options" maxLength={60} {...set("editorial_line")} placeholder="Escolha ou escreva" />
-              <datalist id="entry-line-options">
-                {editorialOptions(client).map((l) => (
-                  <option key={l} value={l} />
-                ))}
-              </datalist>
+              <input id="entry-line" type="text" maxLength={60} {...set("editorial_line")} placeholder="Ex.: Educativo" />
             </div>
             <div>
               <label htmlFor="entry-time">Horário</label>
               <input id="entry-time" type="text" {...set("post_time")} placeholder="Ex.: 12h" />
             </div>
           </div>
-          {editorialOptions(client).length > 0 && (
-            <div className="line-picker">
-              {editorialOptions(client).map((l) => (
-                <button
-                  type="button"
-                  key={l}
-                  className={"line-chip" + (values.editorial_line === l ? " on" : "")}
-                  style={values.editorial_line === l ? lineStyle(l) : undefined}
-                  onClick={() => setValues((v) => ({ ...v, editorial_line: v.editorial_line === l ? "" : l }))}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-          )}
 
           <div>
             <label htmlFor="entry-notes">Observações</label>

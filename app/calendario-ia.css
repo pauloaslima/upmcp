@@ -21,6 +21,6 @@
 
 /* linha editorial do post (etiqueta ao lado do formato) */
 .cal-line { font-size: 9.5px; font-weight: 800; letter-spacing: .02em; padding: 0 6px; border: 1px solid; border-radius: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.line-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.line-chip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim); border-radius: 20px; padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; }
-.line-chip:hover { border-color: var(--gold); }
+.entry-theme-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.entry-theme-head label { margin-bottom: 0; }
+.entry-theme-head + textarea { margin-top: 6px; }

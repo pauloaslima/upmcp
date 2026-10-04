@@ -12,8 +12,8 @@ import { briefDescription, briefWithDefaults } from "../../../lib/brief";
 //          → desenvolve os temas do calendário daquela semana (briefing) e cria novos só se faltar
 // Um post: POST { mode: "entry", client_id, entry_id, guidance }
 //          → gera o conteúdo de um tema só (ex.: demanda que veio do Backlog)
-// Um dia: POST { mode: "day", client_id, day: "AAAA-MM-DD", guidance }
-//          → cria um post novo, já com conteúdo, num dia vazio da semana
+// Rascunho: POST { mode: "draft", client_id, day, draft: { theme, format, editorial_line, post_time, notes } }
+//          → gera um post a partir do que a pessoa escreveu no "Novo tema", sem gravar
 // Mês:     POST { mode: "month", client_id, month: "AAAA-MM", source: "historico"|"texto"|"audio",
 //                 strategy, posts_per_week }
 //          → cria o calendário de temas do mês em volta do que já existe
@@ -40,7 +40,7 @@ export async function POST(request) {
   try {
     if (body.mode === "month") return await runMonth(db, client, body);
     if (body.mode === "entry") return await runEntry(db, client, body);
-    if (body.mode === "day") return await runDay(db, client, body);
+    if (body.mode === "draft") return await runDraft(db, client, body);
     return await runWeek(db, client, body);
   } catch (err) {
     if (err instanceof ContentAgentError) return Response.json({ error: err.message }, { status: 502 });
@@ -152,43 +152,56 @@ async function runEntry(db, client, body) {
   return Response.json({ ok: true, resumo: result.resumo, atualizados: [data], criados: [] });
 }
 
-// Um dia vazio: cria um post só para aquele dia, com tema e briefing.
-async function runDay(db, client, body) {
+// Rascunho do "Novo tema": gera o post a partir do que a pessoa já escreveu, sem gravar.
+// A tela preenche os campos e a pessoa revisa antes de salvar.
+async function runDraft(db, client, body) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(body.day || "")) return Response.json({ error: "Informe o dia." }, { status: 400 });
-  const pubMonday = mondayOf(parse(body.day));
+  const d = body.draft || {};
+  const base = [
+    ["Ideia ou tema", d.theme],
+    ["Formato", d.format],
+    ["Linha editorial", d.editorial_line],
+    ["Horário", d.post_time],
+    ["Observações", d.notes]
+  ]
+    .filter(([, v]) => String(v || "").trim())
+    .map(([k, v]) => k + ": " + String(v).trim().slice(0, 2000));
+  const guidance = base.length
+    ? "A equipe já começou este post. Use como base o que foi escrito abaixo: mantenha a ideia, o formato, a linha editorial e o horário informados, e complete o resto (tema no padrão da agência, observações e briefing completo).\n" + base.join("\n")
+    : "";
+  const { row, resumo } = await oneForDay(db, client, body.day, guidance);
+  if (!row) return Response.json({ error: "Não consegui gerar o conteúdo deste post. Tente de novo." }, { status: 422 });
+  return Response.json({ ok: true, resumo, rascunho: row });
+}
+
+// Gera 1 post para um dia, olhando os outros posts da semana para não repetir assunto.
+async function oneForDay(db, client, day, extra) {
+  const pubMonday = mondayOf(parse(day));
   const offset = Math.round((pubMonday - mondayOf(parse(todayInBrazil()))) / (7 * 86400000));
-  const { data: others } = await db
+  const { data } = await db
     .from("calendar_entries")
     .select("day, format, theme, editorial_line")
     .eq("client_id", client.id)
     .gte("day", iso(pubMonday))
     .lte("day", iso(addDays(pubMonday, 6)));
-  if ((others || []).some((o) => o.day === body.day)) {
-    return Response.json({ error: "Este dia já tem post. Use o ✨ Gerar do próprio post." }, { status: 409 });
-  }
+  const others = data || [];
   const guidance = [
-    body.guidance,
-    "Crie exatamente 1 post em \"novos\", com day = " + body.day + ".",
-    (others || []).length
+    extra,
+    "Crie exatamente 1 post em \"novos\", com day = " + day + ".",
+    others.length
       ? "Outros posts desta semana (não repita o assunto e equilibre formatos e linhas editoriais): " +
-        others.map((o) => [o.format, o.editorial_line, o.theme].filter(Boolean).join(" | ")).join("; ")
+        others.map((o) => [o.day, o.format, o.editorial_line, o.theme].filter(Boolean).join(" | ")).join("; ")
       : ""
   ]
     .filter(Boolean)
     .join("\n");
 
   const context = await clientContext(db, client, { withFiles: false });
-  const result = await generateWeek({ context, week: weekInfo(pubMonday, offset, []), planned: [], guidance, count: "1 post, no dia " + body.day });
+  const result = await generateWeek({ context, week: weekInfo(pubMonday, offset, []), planned: [], guidance, count: "1 post, no dia " + day });
   const post = result.novos[0];
-  if (!post) return Response.json({ error: "Nenhum conteúdo foi gerado para este dia. Tente de novo." }, { status: 422 });
-  const { rows } = cleanAgentEntries(client.id, [{ ...post, day: body.day }]);
-  if (!rows.length) return Response.json({ error: "Nenhum conteúdo foi gerado para este dia. Tente de novo." }, { status: 422 });
-  const { data, error } = await db.from("calendar_entries").insert(rows).select("*");
-  if (error) {
-    console.error(error);
-    return Response.json({ error: "Criei o post, mas não consegui gravar." }, { status: 500 });
-  }
-  return Response.json({ ok: true, resumo: result.resumo, atualizados: [], criados: data || [] });
+  if (!post) return { row: null, resumo: result.resumo };
+  const { rows } = cleanAgentEntries(client.id, [{ ...post, day }]);
+  return { row: rows[0] || null, resumo: result.resumo };
 }
 
 async function runMonth(db, client, body) {
