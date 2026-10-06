@@ -1,6 +1,6 @@
 import { agentDb } from "../../../lib/agentApi";
 import { ContentAgentError } from "../../../lib/contentAgent";
-import { materialsToBlocks } from "../../../lib/materials";
+import { deleteUploaded, materialsToBlocks } from "../../../lib/materials";
 import { suggestProfile } from "../../../lib/profileAgent";
 
 // "✨ Preencher automaticamente" no Perfil do cliente: lê os materiais e devolve sugestões
@@ -25,16 +25,21 @@ export async function POST(request) {
   const materials = [...(client.materials || []), ...(client.identity_files || []).map((f) => ({ ...f, category: "identidade" }))];
   if (!materials.length) return Response.json({ error: "Envie os materiais do cliente antes (em Editar → Materiais do cliente)." }, { status: 400 });
 
-  const { blocks, used, skipped } = await materialsToBlocks(db, materials);
-  if (!used.length) return Response.json({ error: "Não consegui ler nenhum material.", ignorados: skipped }, { status: 400 });
+  const { blocks, used, skipped, uploaded, sizes } = await materialsToBlocks(db, materials);
+  if (!used.length) {
+    await deleteUploaded(uploaded);
+    return Response.json({ error: "Não consegui ler nenhum material.", ignorados: skipped }, { status: 400 });
+  }
 
   try {
-    const { recusados, ...result } = await suggestProfile({ client, blocks });
+    const { recusados, ...result } = await suggestProfile({ client, blocks, sizes });
     const refused = new Set(recusados.map((r) => r.name));
     return Response.json({ ok: true, ...result, lidos: used.filter((n) => !refused.has(n)), ignorados: [...skipped, ...recusados] });
   } catch (err) {
     if (err instanceof ContentAgentError) return Response.json({ error: err.message, ignorados: skipped }, { status: 502 });
     console.error(err);
     return Response.json({ error: "Não consegui gerar agora. Tente de novo em instantes." }, { status: 502 });
+  } finally {
+    await deleteUploaded(uploaded);
   }
 }
