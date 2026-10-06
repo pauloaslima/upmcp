@@ -29,8 +29,9 @@ export async function POST(request) {
   if (!used.length) return Response.json({ error: "Não consegui ler nenhum material.", ignorados: skipped }, { status: 400 });
 
   try {
-    const result = await suggestProfile({ client, blocks });
-    return Response.json({ ok: true, ...result, lidos: used, ignorados: skipped });
+    const { recusados, ...result } = await suggestProfile({ client, blocks });
+    const refused = new Set(recusados.map((r) => r.name));
+    return Response.json({ ok: true, ...result, lidos: used.filter((n) => !refused.has(n)), ignorados: [...skipped, ...recusados] });
   } catch (err) {
     if (err instanceof ContentAgentError) return Response.json({ error: err.message, ignorados: skipped }, { status: 502 });
     console.error(err);
