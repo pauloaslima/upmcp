@@ -1,9 +1,9 @@
-import { clientAdsReport } from "../../../../lib/metaClient";
+import { clientOrganicReport } from "../../../../lib/metaOrganic";
 import { clientAccess, metaFailure, periodFromQuery } from "../../../../lib/metaRoute";
 
-// Anúncios de um cliente (somente leitura), para a área "Anúncios" do cliente.
-// GET /api/meta/client?clientId=<uuid>&datePreset=last_7d|this_month|last_30d
-// GET /api/meta/client?clientId=<uuid>&since=AAAA-MM-DD&until=AAAA-MM-DD
+// Insights orgânicos do Instagram de um cliente (somente leitura), para a área "Insights orgânicos".
+// GET /api/meta/organic?clientId=<uuid>&datePreset=last_7d|this_month|last_30d
+// GET /api/meta/organic?clientId=<uuid>&since=AAAA-MM-DD&until=AAAA-MM-DD
 // Acesso: equipe (qualquer cliente) ou o próprio cliente (só o dele).
 
 export const dynamic = "force-dynamic";
@@ -14,9 +14,9 @@ export async function GET(request) {
   const { client, response } = await clientAccess(request, q.get("clientId") || "");
   if (response) return response;
   try {
-    const report = await clientAdsReport(client, periodFromQuery(q));
+    const report = await clientOrganicReport(client, periodFromQuery(q));
     return Response.json({ ok: true, cliente: client.name, ...report }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    return metaFailure(err, "meta cliente");
+    return metaFailure(err, "meta organico");
   }
 }

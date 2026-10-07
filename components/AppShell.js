@@ -17,6 +17,7 @@ import { ClientTeam } from "./ClientTeam";
 import { ClientProfile } from "./ClientProfile";
 import AssignmentsPage from "./AssignmentsPage";
 import AdsPage from "./AdsPage";
+import OrganicPage from "./OrganicPage";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -45,13 +46,15 @@ const SECTIONS = {
     { id: "calendario", title: "Calendário mensal", icon: "🗓️", text: "Temas do mês, com feriados, datas comemorativas e campanhas." },
     { id: "producao", title: "Linha de produção", icon: "▦", text: "Todas as peças, da estruturação à publicação." },
     { id: "perfil", title: "Perfil do cliente", icon: "🪪", text: "Posicionamento, identidade visual, observações e link do Drive." },
-    { id: "anuncios", title: "Anúncios", icon: "📣", text: "Campanhas da Meta: investimento, alcance e resultados por período." }
+    { id: "anuncios", title: "Anúncios", icon: "📣", text: "Campanhas da Meta: investimento, alcance e resultados por período." },
+    { id: "organico", title: "Insights orgânicos", icon: "📈", text: "Posts do Instagram com alcance, curtidas, comentários e salvos." }
   ],
   cliente: [
     { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os posts planejados para esta semana." },
     { id: "calendario", title: "Calendário mensal", icon: "🗓️", text: "Veja os temas planejados para o mês." },
     { id: "producao", title: "Solicitações e aprovações", icon: "✅", text: "Peça demandas novas no Backlog, aprove, reprove e deixe observações nos conteúdos." },
-    { id: "anuncios", title: "Anúncios", icon: "📣", text: "Acompanhe os resultados das suas campanhas na Meta." }
+    { id: "anuncios", title: "Anúncios", icon: "📣", text: "Acompanhe os resultados das suas campanhas na Meta." },
+    { id: "organico", title: "Insights orgânicos", icon: "📈", text: "Veja como seus posts do Instagram estão indo." }
   ]
 };
 
@@ -506,7 +509,7 @@ export default function AppShell({ session, profile }) {
               {view.section === "hub" && (
                 <div className="page-scroll">
                   <p className="hub-lead">{isStaff ? "O que você vai fazer com este cliente?" : "Olá! Escolha o que deseja ver."}</p>
-                  <div className={"hub-grid" + (sections.length === 5 ? " five" : "")}>
+                  <div className={"hub-grid" + (sections.length === 5 ? " five" : sections.length === 6 ? " six" : "")}>
                     {sections.map((s) => (
                       <button key={s.id} className="hub-tile" onClick={() => openClient(current.id, s.id)}>
                         <span className="hub-icon" aria-hidden="true">
@@ -548,6 +551,12 @@ export default function AppShell({ session, profile }) {
               {view.section === "anuncios" && (
                 <div className="page-scroll">
                   <AdsPage key={"ads-" + current.id} client={current} />
+                </div>
+              )}
+
+              {view.section === "organico" && (
+                <div className="page-scroll">
+                  <OrganicPage key={"org-" + current.id} client={current} />
                 </div>
               )}
 
