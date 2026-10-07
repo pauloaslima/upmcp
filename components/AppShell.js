@@ -258,7 +258,10 @@ export default function AppShell({ session, profile }) {
           <span></span>
         </button>
         <div className="brand">
-          <span className="mark">U!</span>
+          <span className="mark mark-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-up.png" alt="Up! Digital" />
+          </span>
           <div>
             <h1>Up! Fluxo</h1>
             <div className="sub">produção de conteúdo &middot; Up! Digital</div>

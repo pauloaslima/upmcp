@@ -10,6 +10,7 @@ import "./calendario-ia.css";
 import "./perfil.css";
 import "./limpar.css";
 import "./anuncios.css";
+import "./marca.css";
 import "./alinhamento.css";
 
 export const metadata = {

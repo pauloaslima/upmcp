@@ -47,7 +47,10 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <div className="mark">U!</div>
+        <div className="mark mark-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-up.png" alt="Up! Digital" />
+        </div>
         <h2>Up! Fluxo</h2>
         {mode === "login" ? (
           <>
