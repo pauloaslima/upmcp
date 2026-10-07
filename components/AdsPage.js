@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, PeriodFilter, ReportStatus, fmt, useMetaReport } from "./MetaReport";
+import { Card, ExportPdfButton, PeriodFilter, PrintHeader, ReportStatus, fmt, useMetaReport } from "./MetaReport";
 
 // Anúncios do cliente na Meta (somente leitura). Os dados vêm do servidor (/api/meta/client),
 // que procura só as campanhas daquele cliente; o token da Meta nunca chega ao navegador.
@@ -12,10 +12,14 @@ export default function AdsPage({ client }) {
   const periodText = data?.periodo?.inicio ? `${fmt.date(data.periodo.inicio)} a ${fmt.date(data.periodo.fim)}` : "";
 
   return (
-    <section className="checklist-panel ads-panel">
+    <section className="checklist-panel ads-panel report">
+      <PrintHeader client={client} report="Anúncios na Meta" periodText={periodText} />
       <div className="checklist-head">
         <h3>Anúncios</h3>
-        {periodText && <span className="ads-period">{periodText}</span>}
+        <div className="report-head-right">
+          {periodText && <span className="ads-period">{periodText}</span>}
+          <ExportPdfButton title={`Anúncios | ${client.name} | ${periodText}`} disabled={!rows.length} />
+        </div>
       </div>
 
       <PeriodFilter period={period} onChange={setPeriod} idPrefix="ads" />
