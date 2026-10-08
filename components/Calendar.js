@@ -67,6 +67,7 @@ export function EntryChip({ entry, onClick, dragProps, forClient = false }) {
         </span>
       )}
       {!forClient && entry.created_by_agent && <span className="cal-agent">conteúdo criado</span>}
+      {!forClient && entry.published_at && <span className="cal-published">✓ publicado</span>}
       {!forClient && entry.brief_status && entry.brief_status !== "rascunho" && (
         <span className={"cal-brief brief-" + entry.brief_status}>{BRIEF_STATUS[entry.brief_status]?.short}</span>
       )}

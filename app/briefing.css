@@ -35,3 +35,4 @@
 .profile-read.empty { color: var(--text-faint); font-style: italic; }
 .profile-drive { text-decoration: none; }
 .hub-grid { max-width: 1000px; }
+.cal-published { align-self: flex-start; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, #2E8B57 16%, transparent); color: #2E8B57; }

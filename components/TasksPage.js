@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { COLUMNS, COL_INDEX } from "../lib/pipeline";
 import { addDays, cardDue, checklistFor, iso, parse, shortDate, taskStatus } from "../lib/deadlines";
 import { useClientTasks } from "../lib/useClientTasks";
+import { postTitle, usePostTasks } from "../lib/usePostTasks";
 
 const FILTERS = [
   { id: "pendentes", label: "Pendentes" },
@@ -14,7 +15,18 @@ const FILTERS = [
 ];
 const KIND_LABEL = { calendario: "Calendário", design: "Design", ajustes: "Ajustes", aprovacao: "Aprovação" };
 
-// Aba "Tarefas": peças e tarefas de checklist atribuídas a cada pessoa, com prazo.
+// situação do post: mesma régua das outras tarefas, com textos de publicação
+function postStatus(day, done, todayIso) {
+  if (done) return { id: "feito", label: "publicado" };
+  const s = taskStatus({ due: day }, false, todayIso);
+  if (s.id === "hoje") return { ...s, label: "publicar hoje" };
+  if (s.id === "breve") return { ...s, label: `em ${s.days} dia(s)` };
+  if (s.id === "futuro") return { ...s, label: "publicar " + shortDate(day) };
+  return s;
+}
+
+// Aba "Tarefas": peças, tarefas de checklist e posts a publicar atribuídos a cada pessoa, com prazo.
+// Post do calendário: fica com o responsável pelo cliente, no dia da publicação.
 // Funcionário vê só as dele; o administrador pode ver as de todos.
 export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, showToast }) {
   const todayIso = iso(new Date());
@@ -23,6 +35,8 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
   const [clientFilter, setClientFilter] = useState("all"); // id de um cliente ou "all"
   const [cards, setCards] = useState([]);
   const tasks = useClientTasks(null, iso(addDays(parse(todayIso), -60)), showToast);
+  const postTasks = usePostTasks(iso(addDays(parse(todayIso), -60)), iso(addDays(parse(todayIso), 14)), me, showToast);
+  const responsibleOf = Object.fromEntries(clients.map((c) => [c.id, c.responsible_id]));
   const people = Object.fromEntries(team.map((p) => [p.id, p]));
   const clientName = Object.fromEntries(clients.map((c) => [c.id, c.name]));
 
@@ -96,10 +110,27 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
         })
       );
     });
+    postTasks.posts.forEach((post) => {
+      const assignee = responsibleOf[post.client_id];
+      if (!assignee || (who !== "all" && assignee !== who)) return;
+      const done = !!post.published_at;
+      list.push({
+        type: "post",
+        key: "post-" + post.id,
+        post,
+        title: postTitle(post),
+        clientId: post.client_id,
+        assignee,
+        due: post.day,
+        done,
+        status: postStatus(post.day, done, todayIso)
+      });
+    });
     return list
       .filter((i) => clientFilter === "all" || i.clientId === clientFilter)
       .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
-  }, [cards, clients, tasks, todayIso, who, clientFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, clients, tasks, postTasks.posts, todayIso, who, clientFilter]);
 
   const counts = {
     pendentes: items.filter((i) => !i.done).length,
@@ -181,17 +212,26 @@ export default function TasksPage({ me, isAdmin, clients, team, onOpenClient, sh
                   aria-label={"Marcar " + i.title}
                   onChange={(e) => tasks.toggle(i.clientId, i.task, e.target.checked)}
                 />
+              ) : i.type === "post" ? (
+                <input type="checkbox" checked={i.done} aria-label={"Marcar como publicado: " + i.title} onChange={(e) => postTasks.toggle(i.post, e.target.checked)} />
               ) : (
                 <span className="task-kind" title="Peça da linha de produção">
                   ▦
                 </span>
               )}
               <div className="task-item-text">
-                <button className="task-item-title" onClick={() => onOpenClient(i.clientId, i.type === "card" ? "producao" : "hub")}>
+                <button className="task-item-title" onClick={() => onOpenClient(i.clientId, i.type === "card" ? "producao" : i.type === "post" ? "semana" : "hub")}>
                   {i.title}
                 </button>
                 <div className="task-item-meta">
-                  <strong>{clientName[i.clientId] || "Sem cliente"}</strong> · {i.type === "card" ? (i.card.column_id === "backlog" ? "Demanda no Backlog" : "Peça · " + i.sub) : KIND_LABEL[i.task.kind] + " · " + i.sub}
+                  <strong>{clientName[i.clientId] || "Sem cliente"}</strong> ·{" "}
+                  {i.type === "card"
+                    ? i.card.column_id === "backlog"
+                      ? "Demanda no Backlog"
+                      : "Peça · " + i.sub
+                    : i.type === "post"
+                      ? "Post do calendário" + (i.post.format ? " · " + i.post.format : "") + (i.post.post_time ? " · " + i.post.post_time : "")
+                      : KIND_LABEL[i.task.kind] + " · " + i.sub}
                   {who === "all" && people[i.assignee] && <> · {people[i.assignee].full_name || people[i.assignee].email}</>}
                 </div>
               </div>

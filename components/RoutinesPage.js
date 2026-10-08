@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { addDays, iso, parse, shortDate } from "../lib/deadlines";
+import { postTitle, usePostTasks } from "../lib/usePostTasks";
 
 const DAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 const FILTERS = [
@@ -12,6 +13,7 @@ const FILTERS = [
 ];
 
 // Rotina diária: cada funcionário marca o que executou no dia.
+// Os posts do calendário daquele dia entram como "Publicar post" para o responsável pelo cliente.
 // Lembretes às 11:30 e 17:00 para quem tiver item sem marcar (agendados no banco).
 // Cada pessoa vê só a própria rotina; o administrador vê a de todos e monta as rotinas.
 export default function RoutinesPage({ me, isAdmin, clients, team, showToast }) {
@@ -23,6 +25,8 @@ export default function RoutinesPage({ me, isAdmin, clients, team, showToast }) 
   const [managing, setManaging] = useState(false);
   const people = Object.fromEntries(team.map((p) => [p.id, p]));
   const clientName = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+  const responsibleOf = Object.fromEntries(clients.map((c) => [c.id, c.responsible_id]));
+  const postTasks = usePostTasks(day, day, me, showToast);
 
   async function loadRoutines() {
     const { data, error } = await supabase.from("routines").select("*").order("title");
@@ -70,12 +74,21 @@ export default function RoutinesPage({ me, isAdmin, clients, team, showToast }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [routines, dow, who, clients]
   );
-  const visible = todays.filter((r) => (filter === "pendentes" ? !checks[r.id] : filter === "executadas" ? !!checks[r.id] : true));
-  const doneCount = todays.filter((r) => checks[r.id]).length;
+  // posts do dia: do responsável pelo cliente (sem responsável, só o administrador vê, em "Sem responsável")
+  const todaysPosts = postTasks.posts
+    .map((p) => ({ ...p, user_id: responsibleOf[p.client_id] || "sem-responsavel" }))
+    .filter((p) => who === "all" || p.user_id === who)
+    .sort((a, b) => (a.post_time || "").localeCompare(b.post_time || "") || (clientName[a.client_id] || "").localeCompare(clientName[b.client_id] || "", "pt-BR"));
+  const show = (done) => (filter === "pendentes" ? !done : filter === "executadas" ? done : true);
+  const visible = todays.filter((r) => show(!!checks[r.id]));
+  const visiblePosts = todaysPosts.filter((p) => show(!!p.published_at));
+  const total = todays.length + todaysPosts.length;
+  const doneCount = todays.filter((r) => checks[r.id]).length + todaysPosts.filter((p) => p.published_at).length;
 
-  // agrupa por pessoa (útil para o administrador)
+  // agrupa por pessoa (útil para o administrador): posts a publicar primeiro, depois a rotina
   const byPerson = {};
-  visible.forEach((r) => (byPerson[r.user_id] = byPerson[r.user_id] || []).push(r));
+  visiblePosts.forEach((p) => (byPerson[p.user_id] = byPerson[p.user_id] || []).push({ kind: "post", post: p }));
+  visible.forEach((r) => (byPerson[r.user_id] = byPerson[r.user_id] || []).push({ kind: "rotina", r }));
 
   async function toggle(r, done) {
     if (done) {
@@ -136,27 +149,51 @@ export default function RoutinesPage({ me, isAdmin, clients, team, showToast }) 
         )}
       </div>
 
-      {todays.length > 0 && (
+      {total > 0 && (
         <div className="routine-progress">
           <div className="routine-bar">
-            <span style={{ width: `${Math.round((100 * doneCount) / todays.length)}%` }}></span>
+            <span style={{ width: `${Math.round((100 * doneCount) / total)}%` }}></span>
           </div>
-          {doneCount} de {todays.length} executada(s)
-          {isToday && doneCount < todays.length && <span className="hint"> · lembretes às 11:30 e 17:00 enquanto houver pendência</span>}
+          {doneCount} de {total} executada(s)
+          {isToday && doneCount < total && <span className="hint"> · lembretes às 11:30 e 17:00 enquanto houver pendência</span>}
         </div>
       )}
 
       {isAdmin && managing && <RoutineManager routines={routines} clients={clients} team={team} clientName={clientName} people={people} showToast={showToast} onChange={loadRoutines} />}
 
-      {todays.length === 0 && (
-        <div className="empty-state">{routines.length === 0 ? "Nenhuma rotina cadastrada ainda." : "Nenhuma rotina para este dia."}</div>
+      {total === 0 && (
+        <div className="empty-state">{routines.length === 0 && !todaysPosts.length ? "Nenhuma rotina cadastrada ainda." : "Nenhuma rotina para este dia."}</div>
       )}
 
       {Object.entries(byPerson).map(([uid, list]) => (
         <div key={uid} className="routine-group">
-          {(who === "all" || isAdmin) && <h4>{people[uid]?.full_name || people[uid]?.email || "-"}</h4>}
+          {(who === "all" || isAdmin) && <h4>{uid === "sem-responsavel" ? "Sem responsável pelo cliente" : people[uid]?.full_name || people[uid]?.email || "-"}</h4>}
           <div className="task-list">
-            {list.map((r) => {
+            {list.map((item) => {
+              if (item.kind === "post") {
+                const p = item.post;
+                return (
+                  <label key={"post-" + p.id} className={"task-item routine post-task" + (p.published_at ? " done st-feito" : "")}>
+                    <div className="task-item-main">
+                      <input type="checkbox" checked={!!p.published_at} onChange={(e) => postTasks.toggle(p, e.target.checked)} />
+                      <div className="task-item-text">
+                        <span className="task-item-title plain">
+                          {postTitle(p)} | {clientName[p.client_id]}
+                        </span>
+                        <div className="task-item-meta">
+                          {[p.format, p.post_time].filter(Boolean).join(" · ")}
+                          {p.format || p.post_time ? " · " : ""}
+                          {p.published_at
+                            ? `publicado às ${new Date(p.published_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` +
+                              (p.published_by && p.published_by !== p.user_id ? " por " + (people[p.published_by]?.full_name || "outra pessoa") : "")
+                            : "a publicar"}
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                );
+              }
+              const r = item.r;
               const check = checks[r.id];
               return (
                 <label key={r.id} className={"task-item routine" + (check ? " done st-feito" : "")}>
