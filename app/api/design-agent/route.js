@@ -7,6 +7,7 @@ import { downloadStock, findStockCandidates, stockEnabled } from "../../../lib/s
 import { brandFiles, materialsOf } from "../../../lib/profileFields";
 import { createCardFromEntry } from "../../../lib/production";
 import { ART_FORMATS } from "../../../lib/pipeline";
+import { removeTextFromPhoto } from "../../../lib/photoClean";
 
 // Cria a arte de um post (Estático, Carrossel ou Story) e já anexa na peça da Linha de produção.
 // Só a equipe logada. POST { client_id, entry_id | card_id, mode: "material" | "ia", guidance }
@@ -68,6 +69,21 @@ export async function POST(request) {
 
     const design = await designArt({ client, entry: post, assets, mode, guidance: body.guidance, stockAllowed });
     alerts.push(...design.alertas);
+
+    // tira das fotos anexadas o que já vinha escrito nelas
+    for (const t of design.textos_nas_fotos) {
+      const photo = assets.photos[t.foto];
+      if (!photo) continue;
+      try {
+        const cleaned = await removeTextFromPhoto(photo.buffer, t.regioes);
+        photo.buffer = cleaned.buffer;
+        alerts.push(
+          `Foto "${photo.name}": ${[cleaned.cropped ? "cortei a faixa com texto" : "", cleaned.patched ? `apaguei ${cleaned.patched} texto(s) que já estavam escritos` : ""].filter(Boolean).join(" e ")}. Confira se ficou natural.`
+        );
+      } catch (err) {
+        console.error("arte: limpeza da foto falhou", err?.message);
+      }
+    }
 
     // fotos de banco: busca opções para cada página e o designer escolhe a melhor de cada uma
     const size = sizeFor(format);
