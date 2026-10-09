@@ -251,10 +251,9 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
           specials={special[editing.entry ? editing.entry.day : editing.day] || []}
           onClose={() => setEditing(null)}
           onSave={async (values) => {
-            const ok = editing.entry
-              ? await onUpdate(editing.entry.id, values)
-              : await onCreate({ day: editing.day, ...values });
-            if (ok) setEditing(null);
+            const row = editing.entry ? await onUpdate(editing.entry.id, values) : await onCreate({ day: editing.day, ...values });
+            if (row) setEditing({ entry: row });
+            return !!row;
           }}
           onDelete={
             editing.entry
@@ -445,7 +444,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     // fotos tiradas da lista: apaga o arquivo
     (entry?.photos || []).filter((p) => !kept.has(p.path)).forEach(removeFile);
     uploadedNow.current = [];
-    await onSave({
+    const ok = await onSave({
       format: values.format,
       editorial_line: asTitle(values.editorial_line.trim()).slice(0, 60),
       theme: asTitle(values.theme.trim()),
@@ -459,6 +458,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
       ...(client ? { brief, brief_status: briefStatus, created_by_agent: false } : {})
     });
     setSaving(false);
+    if (ok) showToast?.("Salvo.");
   }
 
   return (

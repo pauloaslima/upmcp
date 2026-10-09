@@ -385,8 +385,9 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
           specials={special[editing.entry ? editing.entry.day : editing.day] || []}
           onClose={() => setEditing(null)}
           onSave={async (values) => {
-            const ok = editing.entry ? await update(editing.entry.id, values) : await create({ day: editing.day, ...values });
-            if (ok) setEditing(null);
+            const row = editing.entry ? await update(editing.entry.id, values) : await create({ day: editing.day, ...values });
+            if (row) setEditing({ entry: row });
+            return !!row;
           }}
           onDelete={
             editing.entry

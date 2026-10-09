@@ -384,7 +384,7 @@ function RequestModal({ card, isStaff, client, team = [], me, onClose, onSaved, 
       if (upErr) throw upErr;
       await reload(id);
       showToast(card ? "Solicitação atualizada." : "Solicitação enviada para a equipe da Up!.");
-      onClose();
+      if (!card) onClose();
     } catch (err) {
       console.error(err);
       showToast(card ? "Não consegui salvar. Se a equipe já começou, a solicitação não pode mais ser alterada." : "Não consegui enviar a solicitação.");
