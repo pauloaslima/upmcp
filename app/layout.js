@@ -11,6 +11,7 @@ import "./perfil.css";
 import "./limpar.css";
 import "./anuncios.css";
 import "./marca.css";
+import "./artes.css";
 import "./alinhamento.css";
 
 export const metadata = {

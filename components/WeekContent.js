@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { isoDate, specialDates } from "../lib/holidays";
-import { COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
+import { COLUMNS, COL_INDEX } from "../lib/pipeline";
 import { addDays, iso, mondayOf, monthWeeks, parse, productionWeek, rangeLabel, shortDate, taskStatus, weeklyTasks } from "../lib/deadlines";
 import { useCalendarEntries } from "../lib/useCalendarEntries";
 import { useClientTasks } from "../lib/useClientTasks";
-import { briefDescription, briefWithDefaults } from "../lib/brief";
+import { createCardFromEntry } from "../lib/production";
 import { EntryChip, EntryEditor, MONTHS, SpecialDates, WEEKDAYS } from "./Calendar";
 import AgentDialog from "./AgentDialog";
 import ClearDialog from "./ClearDialog";
+import { ArtDialog, canHaveArt } from "./ArtDesign";
 
 const STEP_SHORT = { design: "Design", ajustes: "Ajustes", aprovacao: "Aprovação" };
 
@@ -44,6 +45,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
   const [cards, setCards] = useState({});
   const [editing, setEditing] = useState(null);
   const [agentWeek, setAgentWeek] = useState(null); // semana aberta no "Criar semana"
+  const [artFor, setArtFor] = useState(null); // posts na janela "Criar arte" (um post ou a semana)
   const [generating, setGenerating] = useState(() => new Set()); // posts gerando conteúdo agora
 
   // 🗑 de cada post: exclui o tema do calendário (a peça ligada a ele, se houver, continua na produção)
@@ -122,41 +124,16 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
   }, [weeks]);
 
   async function toProduction(entry) {
-    const { data: card, error } = await supabase
-      .from("cards")
-      .insert({
-        ...defaultCard("estruturacao"),
-        title: entry.theme,
-        format: FORMATS.includes(entry.format) ? entry.format : "Outro",
-        publish_date: entry.day,
-        client: client.name,
-        client_id: client.id,
-        assignee_id: client.responsible_id || null,
-        // fotos e referências do tema viram anexos da peça; a identidade vai para "referência visual"
-        attachments: [...(entry.photos || []), ...(entry.refs || [])],
-        visual_ref:
-          entry.use_client_identity === false
-            ? entry.identity_notes || ""
-            : client.identity
-              ? "Identidade do cliente: " + client.identity
-              : ""
-      })
-      .select("id, column_id, title")
-      .single();
-    if (error) {
+    try {
+      const card = await createCardFromEntry(supabase, client, entry);
+      addLocal([{ ...entry, card_id: card.id }]);
+      setCards((prev) => ({ ...prev, [card.id]: card }));
+      return true;
+    } catch (error) {
       console.error(error);
       showToast("Não consegui criar a peça.");
       return false;
     }
-    if (entry.notes) await supabase.from("card_comments").insert({ card_id: card.id, body: "Do calendário: " + entry.notes, internal: true });
-    if (entry.brief && Object.keys(entry.brief).length) {
-      const brief = briefWithDefaults(entry, entry.day);
-      await supabase.from("card_comments").insert({ card_id: card.id, body: "Briefing para o design:\n\n" + briefDescription(entry, brief, client.identity), internal: true });
-      if (brief.piece_text) await supabase.from("cards").update({ copy: brief.piece_text }).eq("id", card.id);
-    }
-    await update(entry.id, { card_id: card.id });
-    setCards((prev) => ({ ...prev, [card.id]: card }));
-    return true;
   }
 
   async function sendWeek(days) {
@@ -229,6 +206,7 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
           offset === 0 ? "semana atual" : offset === 1 ? "próxima semana" : offset === 2 ? "em produção agora" : offset > 2 ? "planejamento" : "passada";
         const weekEntries = days.flatMap((d) => byDay[iso(d)] || []);
         const pending = weekEntries.filter((e) => e.theme && !(e.card_id && cards[e.card_id])).length;
+        const artEntries = weekEntries.filter(canHaveArt);
 
         return (
           <section key={pubIso} className={"week-block" + (offset === 2 ? " producing" : "")}>
@@ -251,6 +229,14 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                   })}
                   <button className="btn btn-plain week-ai" onClick={() => setAgentWeek({ start: pubIso, end: iso(days[6]), count: weekEntries.length })}>
                     ✨ Criar semana
+                  </button>
+                  <button
+                    className="btn btn-plain week-art"
+                    disabled={!artEntries.length}
+                    title={artEntries.length ? "Criar as artes dos estáticos e carrosséis desta semana" : "Nenhum estático ou carrossel com tema nesta semana"}
+                    onClick={() => setArtFor({ entries: artEntries, week: true })}
+                  >
+                    🎨 Criar artes da semana
                   </button>
                   <button
                     className="btn btn-plain danger week-clear"
@@ -305,6 +291,16 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                                 </button>
                               )}
                               <span className="week-mini">
+                                {canHaveArt(entry) && (
+                                  <button
+                                    type="button"
+                                    className="mini-link"
+                                    title={entry.art?.length ? "Criar a arte de novo" : "Criar a arte deste post"}
+                                    onClick={() => setArtFor({ entries: [entry], week: false })}
+                                  >
+                                    🎨 Arte
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   className="mini-link"
@@ -355,6 +351,17 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
           entries={entries.filter((e) => e.day >= clearWeek.start && e.day <= clearWeek.end)}
           onClose={() => setClearWeek(null)}
           onConfirm={removeMany}
+        />
+      )}
+
+      {artFor && (
+        <ArtDialog
+          client={client}
+          entries={artFor.entries}
+          week={artFor.week}
+          onCreated={(updated) => addLocal([updated])}
+          onClose={() => setArtFor(null)}
+          showToast={showToast}
         />
       )}
 

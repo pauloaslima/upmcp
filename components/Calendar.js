@@ -9,6 +9,7 @@ import { brandFiles } from "../lib/profileFields";
 import { asText, asTitle } from "../lib/text";
 import { lineStyle } from "../lib/editorial";
 import { supabase } from "../lib/supabaseClient";
+import { ArtStrip, ArtThumb } from "./ArtDesign";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -43,9 +44,10 @@ export function SpecialDates({ list }) {
 // forClient: esconde tudo o que é de uso interno (etiquetas, status do briefing, observações da equipe).
 export function EntryChip({ entry, onClick, dragProps, forClient = false }) {
   const Tag = onClick ? "button" : "div";
+  const hasArt = !forClient && (entry.art || []).length > 0;
   return (
     <Tag className={"cal-entry" + (onClick ? "" : " readonly") + (dragProps ? " draggable" : "")} onClick={onClick || undefined} {...(dragProps || {})}>
-      {(entry.format || entry.post_time || entry.editorial_line) && (
+      {(entry.format || entry.post_time || entry.editorial_line || hasArt) && (
         <span className="cal-entry-top">
           {entry.format && (
             <span className="cal-format" style={formatStyle(entry.format)}>
@@ -58,6 +60,7 @@ export function EntryChip({ entry, onClick, dragProps, forClient = false }) {
             </span>
           )}
           {entry.post_time && <span className="cal-time">{entry.post_time}</span>}
+          {hasArt && <ArtThumb art={entry.art} size="xs" />}
         </span>
       )}
       <span className="cal-theme">{entry.theme || <em>sem tema</em>}</span>
@@ -525,6 +528,13 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
 
           {client && (
             <>
+              {(entry?.art || []).length > 0 && (
+                <div>
+                  <label>Arte</label>
+                  <ArtStrip art={entry.art} />
+                  <p className="hint">A arte também está anexada na peça da Linha de produção. Para refazer, use 🎨 Arte no Conteúdo da semana.</p>
+                </div>
+              )}
               <div>
                 <label>Fotos para o post</label>
                 <AttachmentList

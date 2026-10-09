@@ -1,0 +1,36 @@
+/* ---------- Artes criadas pelo sistema ---------- */
+
+/* miniatura: proporção do feed (4:5), sem mexer no tamanho dos cartões */
+.art-thumb { position: relative; display: inline-flex; flex: none; overflow: hidden; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.art-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.art-thumb-ph { width: 100%; height: 100%; display: block; background: linear-gradient(135deg, var(--surface-2), var(--border)); }
+.art-thumb.xs { width: 24px; height: 30px; margin-left: auto; }
+.art-thumb.sm { width: 40px; height: 50px; border-radius: 6px; }
+.art-thumb.md { width: 72px; height: 90px; border-radius: 8px; }
+.art-thumb-count { position: absolute; right: 1px; bottom: 1px; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 7px; background: rgba(20, 20, 26, .82); color: #fff; font-size: 9px; font-weight: 800; line-height: 13px; text-align: center; }
+.art-thumb.xs .art-thumb-count { min-width: 11px; height: 11px; line-height: 11px; font-size: 8px; padding: 0 2px; }
+
+/* páginas da arte no editor e na janela de criação */
+.art-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.art-page { flex: none; width: 104px; aspect-ratio: 4 / 5; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); display: block; }
+.art-page img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.art-page:hover { border-color: var(--gold); }
+
+/* janela "Criar arte" */
+.art-dialog .modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; padding: 14px 22px 18px; border-top: 1px solid var(--border); }
+.art-dialog .modal-foot .hint { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; }
+.art-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .art-modes { grid-template-columns: 1fr; } }
+.art-mode { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim); font-size: 12.5px; line-height: 1.4; }
+.art-mode strong { color: var(--text); font-size: 13.5px; }
+.art-mode.on { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, var(--surface)); }
+.art-mode:hover:not(:disabled) { border-color: var(--gold); }
+.art-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; }
+.art-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.art-row-main { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 12.5px; font-weight: 500; color: var(--text); text-transform: none; letter-spacing: 0; }
+.art-row-main input { margin-top: 2px; }
+.art-row-main em { color: var(--text-faint); font-style: normal; }
+.art-st { display: inline-flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-dim); }
+.art-st.ok { color: #2E8B57; }
+.art-st.erro { color: var(--terracotta); }
+.art-alerts { margin: 0; padding-left: 18px; font-weight: 500; color: var(--text-dim); }

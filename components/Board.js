@@ -6,6 +6,7 @@ import { CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib
 import { cardDue, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/deadlines";
 import { openAttachment, removeFile, uploadFile } from "../lib/files";
 import { shortName } from "../lib/people";
+import { ArtThumb } from "./ArtDesign";
 
 export function initials(person) {
   const name = (person?.full_name || person?.email || "?").trim();
@@ -536,6 +537,7 @@ function CardTile({ card, isStaff, people = {}, assignee, onOpen, dragCardId }) 
       <div className="card-top">
         <div className="card-title">{card.title || "Sem título"}</div>
         {isStaff && <div className="card-id mono">#{card.id.slice(-5).toUpperCase()}</div>}
+        <ArtThumb art={(card.attachments || []).filter((a) => a?.art)} size="sm" title="Arte da peça" />
       </div>
       <div className="card-tags">
         {card.format && <span className="tag tag-format">{card.format}</span>}
