@@ -34,3 +34,7 @@
 .art-st.ok { color: #2E8B57; }
 .art-st.erro { color: var(--terracotta); }
 .art-alerts { margin: 0; padding-left: 18px; font-weight: 500; color: var(--text-dim); }
+
+/* barra com "Gerar conteúdo" e "Criar arte" no editor do post e na peça */
+.editor-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.editor-tools .hint { margin: 0 0 0 auto; font-size: 11.5px; }

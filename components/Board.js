@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
+import { ART_FORMATS, CLIENT_COLUMNS, COLUMNS, COL_INDEX, FORMATS, defaultCard } from "../lib/pipeline";
 import { cardDue, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/deadlines";
 import { openAttachment, removeFile, uploadFile } from "../lib/files";
 import { shortName } from "../lib/people";
-import { ArtThumb } from "./ArtDesign";
+import { ArtDialog, ArtStrip, ArtThumb } from "./ArtDesign";
 
 export function initials(person) {
   const name = (person?.full_name || person?.email || "?").trim();
@@ -235,6 +235,7 @@ export default function Board({ client, isStaff, isAdmin = false, me = null, tea
         (isStaff ? (
           <CardModal
             card={openCard}
+            client={client}
             onClose={() => setOpenId(null)}
             onSave={(patch) => saveCard(openCard.id, patch)}
             onDelete={() => deleteCard(openCard.id)}
@@ -848,12 +849,57 @@ function ReceivePanel({ card, team, me, isAdmin, onReceived, showToast }) {
   );
 }
 
-function CardModal({ card, onClose, onSave, onDelete, onReceived, showToast, team, me, isAdmin }) {
+function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showToast, team, me, isAdmin }) {
   const [local, setLocal] = useState(card);
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const [entry, setEntry] = useState(null); // post do calendário ligado a esta peça (se houver)
+  const [generating, setGenerating] = useState(false);
+  const [artOpen, setArtOpen] = useState(false);
 
   useEffect(() => setLocal(card), [card]);
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("calendar_entries")
+      .select("id, brief_status")
+      .eq("card_id", card.id)
+      .maybeSingle()
+      .then(({ data }) => alive && setEntry(data || null));
+    return () => {
+      alive = false;
+    };
+  }, [card.id]);
+
+  // "✨ Gerar conteúdo": desenvolve o post do calendário ligado à peça; o briefing vai para as observações da peça
+  async function generateContent() {
+    if (!entry) return;
+    setGenerating(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch("/api/content-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
+        body: JSON.stringify({ mode: "entry", client_id: card.client_id, entry_id: entry.id })
+      });
+      const json = await res.json().catch(() => ({}));
+      const r = json.atualizados?.[0];
+      if (!res.ok || !r) {
+        showToast(json.error || "Não consegui gerar o conteúdo agora.");
+        return;
+      }
+      if (!local.copy?.trim() && r.brief?.piece_text) {
+        setLocal((l) => ({ ...l, copy: r.brief.piece_text }));
+        onSave({ copy: r.brief.piece_text });
+      }
+      showToast("Conteúdo gerado. O briefing está nas observações da peça.");
+    } catch (err) {
+      console.error(err);
+      showToast("Não consegui falar com o servidor. Confira a internet e tente de novo.");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   function field(key) {
     return {
@@ -927,6 +973,46 @@ function CardModal({ card, onClose, onSave, onDelete, onReceived, showToast, tea
           </button>
         </div>
         <div className="modal-body">
+          <div className="editor-tools">
+            <button
+              type="button"
+              className="btn btn-plain"
+              onClick={generateContent}
+              disabled={!entry || generating || (entry.brief_status && entry.brief_status !== "rascunho")}
+              title={
+                !entry
+                  ? "Esta peça não está ligada a um post do calendário"
+                  : entry.brief_status && entry.brief_status !== "rascunho"
+                    ? "O briefing do post já está pronto ou enviado ao design"
+                    : "Desenvolver o tema e o briefing do post desta peça"
+              }
+            >
+              {generating ? (
+                <>
+                  <span className="spinner small" aria-hidden="true"></span> gerando…
+                </>
+              ) : (
+                "✨ Gerar conteúdo"
+              )}
+            </button>
+            <button
+              type="button"
+              className="btn btn-plain"
+              onClick={() => setArtOpen(true)}
+              disabled={!ART_FORMATS.includes(local.format) || !local.title?.trim()}
+              title={ART_FORMATS.includes(local.format) ? "Criar a arte com os arquivos, o texto e o briefing desta peça" : "A arte automática é para Estático, Carrossel e Story"}
+            >
+              🎨 Criar arte
+            </button>
+          </div>
+          {(local.attachments || []).some((a) => a?.art) && (
+            <div>
+              <div className="section-label" style={{ marginBottom: 8 }}>
+                Arte
+              </div>
+              <ArtStrip art={(local.attachments || []).filter((a) => a?.art)} />
+            </div>
+          )}
           {(local.requested_by || local.column_id === "backlog") && (
             <ReceivePanel card={local} team={team} me={me} isAdmin={isAdmin} onReceived={onReceived} showToast={showToast} />
           )}
@@ -1108,6 +1194,23 @@ function CardModal({ card, onClose, onSave, onDelete, onReceived, showToast, tea
           </div>
 
           <CardComments cardId={card.id} showToast={showToast} />
+          {artOpen && client && (
+            <ArtDialog
+              client={client}
+              entries={[
+                {
+                  id: card.id,
+                  cardOnly: true,
+                  theme: local.title,
+                  format: local.format,
+                  day: local.publish_date || "",
+                  art: (local.attachments || []).filter((a) => a?.art)
+                }
+              ]}
+              onClose={() => setArtOpen(false)}
+              showToast={showToast}
+            />
+          )}
 
           <div className="modal-footer">
             <span className="footer-note">

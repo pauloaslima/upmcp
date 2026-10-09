@@ -107,14 +107,14 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
       const res = await fetch("/api/design-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
-        body: JSON.stringify({ client_id: client.id, entry_id: entry.id, mode, guidance })
+        body: JSON.stringify({ client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance })
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setStatus((s) => ({ ...s, [entry.id]: { state: "erro", msg: json.error || "Não consegui criar a arte." } }));
         return false;
       }
-      onCreated({ ...entry, art: json.art, card_id: json.card_id });
+      onCreated?.({ ...entry, art: json.art, card_id: json.card_id });
       setStatus((s) => ({ ...s, [entry.id]: { state: "ok", alertas: json.alertas || [] } }));
       return true;
     } catch (err) {
@@ -144,7 +144,13 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
     });
 
   return (
-    <div className="overlay" onClick={(e) => e.target.classList.contains("overlay") && !running && onClose()}>
+    <div
+      className="overlay art-overlay"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.target.classList.contains("art-overlay") && !running) onClose();
+      }}
+    >
       <div className="modal modal-md art-dialog" role="dialog" aria-label={single ? "Criar arte" : "Criar artes da semana"}>
         <div className="modal-head">
           <div style={{ flex: 1 }}>

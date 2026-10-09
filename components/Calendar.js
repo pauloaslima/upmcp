@@ -9,7 +9,7 @@ import { brandFiles } from "../lib/profileFields";
 import { asText, asTitle } from "../lib/text";
 import { lineStyle } from "../lib/editorial";
 import { supabase } from "../lib/supabaseClient";
-import { ArtStrip, ArtThumb } from "./ArtDesign";
+import { ArtDialog, ArtStrip, ArtThumb, canHaveArt } from "./ArtDesign";
 import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
 
 export const MONTHS = [
@@ -286,6 +286,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
   const setB = (key) => ({ value: brief[key], onChange: (e) => setBrief((b) => ({ ...b, [key]: e.target.value })) });
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [artOpen, setArtOpen] = useState(false);
+  const [art, setArt] = useState(entry?.art || []);
   const [uploading, setUploading] = useState(false);
   const [newRef, setNewRef] = useState("");
   const uploadedNow = useRef([]); // fotos enviadas nesta edição (apagadas se cancelar)
@@ -394,6 +396,44 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     }
   }
 
+  // "✨ Gerar conteúdo" de um post que já existe: desenvolve tema e briefing e preenche os campos
+  async function generateExisting() {
+    if (briefStatus !== "rascunho") {
+      showToast?.("O briefing deste post já está pronto ou enviado ao design. Volte para rascunho para gerar de novo.");
+      return;
+    }
+    setGenerating(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch("/api/content-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
+        body: JSON.stringify({ mode: "entry", client_id: client.id, entry_id: entry.id })
+      });
+      const json = await res.json().catch(() => ({}));
+      const r = json.atualizados?.[0];
+      if (!res.ok || !r) {
+        showToast?.(json.error || "Não consegui gerar o conteúdo agora.");
+        return;
+      }
+      setValues((v) => ({
+        ...v,
+        theme: r.theme || v.theme,
+        format: r.format || v.format,
+        editorial_line: r.editorial_line || v.editorial_line,
+        post_time: r.post_time || v.post_time,
+        notes: r.notes || v.notes
+      }));
+      setBrief(briefWithDefaults(r, day));
+      showToast?.("Conteúdo gerado. Revise e clique em Salvar.");
+    } catch (err) {
+      console.error(err);
+      showToast?.("Não consegui falar com o servidor. Confira a internet e tente de novo.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   async function submit(e) {
     e.preventDefault();
     if (briefStatus === "pronto" && missing.length) {
@@ -439,6 +479,29 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
           </button>
         </div>
         <div className="modal-body">
+          {client && entry && (
+            <div className="editor-tools">
+              <button type="button" className="btn btn-plain" onClick={generateExisting} disabled={generating} title="Desenvolver o tema e o briefing deste post">
+                {generating ? (
+                  <>
+                    <span className="spinner small" aria-hidden="true"></span> gerando…
+                  </>
+                ) : (
+                  "✨ Gerar conteúdo"
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn btn-plain"
+                onClick={() => setArtOpen(true)}
+                disabled={!canHaveArt({ format: values.format, theme: values.theme })}
+                title={canHaveArt({ format: values.format, theme: values.theme }) ? "Criar a arte com o material do post e da peça" : "A arte automática é para Estático, Carrossel e Story com tema"}
+              >
+                🎨 Criar arte
+              </button>
+              <span className="hint">A arte usa o que já está salvo no post e na peça.</span>
+            </div>
+          )}
           {specials.length > 0 && (
             <div className="entry-specials">
               {specials.map((s) => (
@@ -528,11 +591,11 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
 
           {client && (
             <>
-              {(entry?.art || []).length > 0 && (
+              {art.length > 0 && (
                 <div>
                   <label>Arte</label>
-                  <ArtStrip art={entry.art} />
-                  <p className="hint">A arte também está anexada na peça da Linha de produção. Para refazer, use 🎨 Arte no Conteúdo da semana.</p>
+                  <ArtStrip art={art} />
+                  <p className="hint">A arte também está anexada na peça da Linha de produção. Para refazer, use 🎨 Criar arte.</p>
                 </div>
               )}
               <div>
@@ -746,6 +809,15 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
           </div>
         </div>
       </form>
+      {artOpen && entry && client && (
+        <ArtDialog
+          client={client}
+          entries={[{ ...entry, ...values, art }]}
+          onCreated={(updated) => setArt(updated.art || [])}
+          onClose={() => setArtOpen(false)}
+          showToast={showToast}
+        />
+      )}
     </div>
   );
 }
