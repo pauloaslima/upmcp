@@ -79,6 +79,12 @@ export const canHaveArt = (entry) => ART_FORMATS.includes(entry?.format) && !!en
 
 const MODES = [
   {
+    id: "gerar",
+    title: "Gerar imagem nova",
+    text: "Usa as fotos anexadas quando houver e, se faltar, cria uma imagem nova para o tema, no estilo da marca.",
+    needs: "geracao"
+  },
+  {
     id: "ia",
     title: "Criar do zero",
     text: "Usa as fotos anexadas quando houver e, se faltar, uma foto de banco de imagens ligada ao tema."
@@ -94,6 +100,17 @@ const MODES = [
 export function ArtDialog({ client, entries, week = false, onCreated, onClose, showToast }) {
   const single = !week;
   const [mode, setMode] = useState("ia");
+  const [caps, setCaps] = useState(null); // o que está configurado no servidor: { geracao, banco }
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/design-agent")
+      .then((r) => r.json())
+      .then((c) => alive && setCaps(c))
+      .catch(() => alive && setCaps({}));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [guidance, setGuidance] = useState("");
   const [picked, setPicked] = useState(() => new Set(entries.filter((e) => single || !e.art?.length).map((e) => e.id)));
   const [status, setStatus] = useState({}); // entry id -> { state: "fila" | "criando" | "ok" | "erro", msg, alertas }
@@ -174,12 +191,23 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
           <div>
             <label>Como criar</label>
             <div className="art-modes">
-              {MODES.map((m) => (
-                <button key={m.id} type="button" className={"art-mode" + (mode === m.id ? " on" : "")} onClick={() => setMode(m.id)} disabled={running} aria-pressed={mode === m.id}>
-                  <strong>{m.title}</strong>
-                  <span>{m.text}</span>
-                </button>
-              ))}
+              {MODES.map((m) => {
+                const off = m.needs && caps && !caps[m.needs];
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={"art-mode" + (mode === m.id ? " on" : "")}
+                    onClick={() => setMode(m.id)}
+                    disabled={running || off}
+                    aria-pressed={mode === m.id}
+                    title={off ? "Aguardando a configuração do gerador de imagens (OPENAI_API_KEY na Vercel)" : ""}
+                  >
+                    <strong>{m.title}</strong>
+                    <span>{off ? "Aguardando configuração na Vercel." : m.text}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

@@ -8,6 +8,7 @@ import { brandFiles, materialsOf } from "../../../lib/profileFields";
 import { createCardFromEntry } from "../../../lib/production";
 import { ART_FORMATS } from "../../../lib/pipeline";
 import { removeTextFromPhoto } from "../../../lib/photoClean";
+import { generatePhoto, imageGenEnabled, removeTextAI } from "../../../lib/openaiImages";
 
 // Cria a arte de um post (Estático, Carrossel ou Story) e já anexa na peça da Linha de produção.
 // Só a equipe logada. POST { client_id, entry_id | card_id, mode: "material" | "ia", guidance }
@@ -17,6 +18,8 @@ import { removeTextFromPhoto } from "../../../lib/photoClean";
 // roteiro, CTA, objetivo, referência visual, briefing e observações; e o perfil do cliente.
 //   material: usa só o que já está anexado (fotos, logo) e as cores do cliente
 //   ia: usa o que está anexado e, quando faltar foto, escolhe uma de banco de imagens ligada ao tema
+//   gerar: usa o que está anexado e, quando faltar foto, gera uma imagem nova (OpenAI; precisa de OPENAI_API_KEY)
+// GET devolve o que está configurado: { geracao, banco }
 // As imagens ficam na pasta da peça no bucket "anexos" (quem vê a peça vê a arte).
 
 export const dynamic = "force-dynamic";
@@ -25,6 +28,10 @@ export const maxDuration = 300;
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 const LOGO = /\.(png|jpe?g|webp|svg)$/i;
 const isLogoName = (f) => /logo|marca|brand/i.test(f.name || f.path || "");
+
+export function GET() {
+  return Response.json({ geracao: imageGenEnabled(), banco: stockEnabled() });
+}
 
 export async function POST(request) {
   const db = agentDb();
@@ -35,7 +42,7 @@ export async function POST(request) {
   if (!["admin", "funcionario"].includes(me?.role)) return Response.json({ error: "Só a equipe pode criar artes." }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
-  const mode = body.mode === "material" ? "material" : "ia";
+  const mode = ["material", "gerar"].includes(body.mode) ? body.mode : "ia";
   const { data: client } = await db.from("clients").select("*").eq("id", body.client_id || "").maybeSingle();
   if (!client) return Response.json({ error: "Cliente não encontrado." }, { status: 404 });
 
@@ -63,17 +70,29 @@ export async function POST(request) {
     const alerts = [];
     const assets = await loadAssets(db, client, entry, card);
     if (!assets.logo) alerts.push("Não encontrei a logo: anexe na peça ou nos materiais de identidade do cliente um arquivo com \"logo\" no nome. A arte saiu sem logo.");
-    const stockAllowed = mode === "ia" && stockEnabled();
+    const genAllowed = mode === "gerar" && imageGenEnabled();
+    // sem gerador configurado, "gerar" cai para o banco de imagens
+    const stockAllowed = (mode === "ia" || (mode === "gerar" && !genAllowed)) && stockEnabled();
+    if (mode === "gerar" && !genAllowed) alerts.push("O gerador de imagens ainda não está configurado (falta OPENAI_API_KEY na Vercel).");
     if (mode === "ia" && !stockEnabled() && !assets.photos.length) alerts.push("Sem foto anexada e sem banco de imagens configurado: a arte saiu só com texto e cores.");
     if (mode === "material" && !assets.photos.length) alerts.push("O post e a peça não têm fotos anexadas: a arte saiu só com texto e cores.");
 
-    const design = await designArt({ client, entry: post, assets, mode, guidance: body.guidance, stockAllowed });
+    const design = await designArt({ client, entry: post, assets, mode, guidance: body.guidance, stockAllowed, genAllowed });
     alerts.push(...design.alertas);
 
     // tira das fotos anexadas o que já vinha escrito nelas
     for (const t of design.textos_nas_fotos) {
       const photo = assets.photos[t.foto];
       if (!photo) continue;
+      if (imageGenEnabled()) {
+        try {
+          photo.buffer = await removeTextAI(photo.buffer, t.regioes);
+          alerts.push(`Foto "${photo.name}": textos que já estavam escritos foram removidos e o fundo refeito. Confira se ficou natural.`);
+          continue;
+        } catch (err) {
+          console.error("arte: remoção de texto pela OpenAI falhou", err?.message);
+        }
+      }
       try {
         const cleaned = await removeTextFromPhoto(photo.buffer, t.regioes);
         photo.buffer = cleaned.buffer;
@@ -115,12 +134,34 @@ export async function POST(request) {
       }
     }
 
+    // imagens novas (OpenAI) para as páginas de foto sem foto anexada
+    const generatedFor = {};
+    if (genAllowed) {
+      const toGenerate = design.paginas
+        .map((p, i) => ({ ...p, index: i }))
+        .filter((p) => photoBox(p.layout, size) && !(p.foto >= 0 && assets.photos[p.foto]) && p.descricao_imagem)
+        .slice(0, 3);
+      const results = await Promise.all(
+        toGenerate.map((p) =>
+          generatePhoto(p.descricao_imagem, photoBox(p.layout, size))
+            .then((buffer) => ({ p, buffer }))
+            .catch((err) => ({ p, error: err?.message || "erro" }))
+        )
+      );
+      for (const r of results) {
+        if (r.buffer) {
+          generatedFor[r.p.index] = r.buffer;
+          alerts.push(`Página ${r.p.index + 1}: imagem gerada para a arte. Confira antes de publicar.`);
+        } else alerts.push(`Página ${r.p.index + 1}: não consegui gerar a imagem (${r.error}).`);
+      }
+    }
+
     // foto de cada página, recortada no tamanho do layout
     const photos = [];
     for (let i = 0; i < design.paginas.length; i++) {
       const page = design.paginas[i];
       const box = photoBox(page.layout, size);
-      const buffer = !box ? null : page.foto >= 0 ? assets.photos[page.foto]?.buffer : stockFor[i];
+      const buffer = !box ? null : page.foto >= 0 ? assets.photos[page.foto]?.buffer : generatedFor[i] || stockFor[i];
       photos.push(buffer ? await cropTo(buffer, box) : null);
     }
 
