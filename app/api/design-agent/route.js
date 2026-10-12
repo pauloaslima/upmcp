@@ -111,7 +111,7 @@ export async function POST(request) {
         if (!buffer) continue;
         used.add(pick.id);
         stockFor[o.page.index] = buffer;
-        alerts.push(`Página ${o.page.index + 1}: foto ilustrativa de banco de imagens. Confira antes de publicar.`);
+        alerts.push(`Página ${o.page.index + 1}: foto de banco de imagens. Confira antes de publicar.`);
       }
     }
 
