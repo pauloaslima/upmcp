@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { agentDb } from "../../../lib/agentApi";
 import { ContentAgentError } from "../../../lib/contentAgent";
-import { chooseStockPhotos, designArt } from "../../../lib/designAgent";
+import { chooseStockPhotos, designArt, reviewArt } from "../../../lib/designAgent";
 import { photoBox, renderArt, sizeFor } from "../../../lib/artRender";
 import { downloadStock, findStockCandidates, stockEnabled } from "../../../lib/stockPhotos";
 import { brandFiles, materialsOf } from "../../../lib/profileFields";
@@ -23,9 +23,14 @@ import { enhanceLocal } from "../../../lib/photoEnhance";
 //   enhance: true melhora as fotos anexadas usadas na arte (ajuste leve em todas; as fracas passam pela OpenAI)
 // GET devolve o que está configurado: { geracao, banco }
 // As imagens ficam na pasta da peça no bucket "anexos" (quem vê a peça vê a arte).
+// Depois de desenhada, a arte é avaliada pelo diretor de arte; se estiver genérica, desequilibrada ou
+// ilegível, é refeita uma vez com as mesmas imagens (sem gerar nem buscar fotos de novo), se der tempo.
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+const REVIEW_UNTIL_MS = 170 * 1000; // só avalia se ainda sobra tempo para responder
+const REDO_UNTIL_MS = 190 * 1000; // e só refaz se ainda couber um novo projeto
 
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 const LOGO = /\.(png|jpe?g|webp|svg)$/i;
@@ -36,6 +41,7 @@ export function GET() {
 }
 
 export async function POST(request) {
+  const startedAt = Date.now();
   const db = agentDb();
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const { data: auth } = token ? await db.auth.getUser(token) : { data: null };
@@ -79,7 +85,7 @@ export async function POST(request) {
     if (mode === "ia" && !stockEnabled() && !assets.photos.length) alerts.push("Sem foto anexada e sem banco de imagens configurado: a arte saiu só com texto e cores.");
     if (mode === "material" && !assets.photos.length) alerts.push("O post e a peça não têm fotos anexadas: a arte saiu só com texto e cores.");
 
-    const design = await designArt({ client, entry: post, assets, mode, guidance: body.guidance, stockAllowed, genAllowed });
+    let design = await designArt({ client, entry: post, assets, mode, guidance: body.guidance, stockAllowed, genAllowed });
     alerts.push(...design.alertas);
 
     // tira das fotos anexadas o que já vinha escrito nelas
@@ -195,7 +201,49 @@ export async function POST(request) {
       photos.push(buffer ? await cropTo(buffer, box) : null);
     }
 
-    const pngs = await renderArt({ design, format, photos, logo: assets.logo });
+    let pngs = await renderArt({ design, format, photos, logo: assets.logo });
+
+    // etapas 6 e 7 da direção de arte: avaliar a arte pronta e, se estiver fraca, refazer uma vez
+    let review = null;
+    if (Date.now() - startedAt < REVIEW_UNTIL_MS) {
+      review = await reviewArt({ client, post, design, pages: await Promise.all(pngs.map((b) => preview(b, 768))), assets });
+    }
+    if (review && !review.aprovada) {
+      const problems = review.problemas.join(" ");
+      if (Date.now() - startedAt < REDO_UNTIL_MS) {
+        try {
+          // as imagens de banco e geradas da primeira versão entram como material, para não gastar de novo
+          const extra = await Promise.all(
+            Object.entries({ ...stockFor, ...generatedFor }).map(async ([i, buffer]) => ({ name: `imagem usada na página ${Number(i) + 1} da primeira versão`, buffer, preview: await preview(buffer) }))
+          );
+          const pool = [...assets.photos, ...extra];
+          const redo = await designArt({
+            client,
+            entry: post,
+            assets: { ...assets, photos: pool },
+            mode: "material",
+            guidance: body.guidance,
+            stockAllowed: false,
+            genAllowed: false,
+            revisao: { problemas: review.problemas, orientacao: review.orientacao, conceito_anterior: design.conceito }
+          });
+          const redoPhotos = [];
+          for (const page of redo.paginas) {
+            const box = photoBox(page.layout, size);
+            const buffer = box && page.foto >= 0 ? pool[page.foto]?.buffer : null;
+            redoPhotos.push(buffer ? await cropTo(buffer, box) : null);
+          }
+          pngs = await renderArt({ design: redo, format, photos: redoPhotos, logo: assets.logo });
+          design = redo;
+          alerts.push(`A primeira versão foi reprovada na avaliação de direção de arte (${problems}) e a arte foi refeita.`, ...redo.alertas);
+        } catch (err) {
+          console.error("arte: refazer após avaliação falhou", err?.message);
+          alerts.push(`A avaliação de direção de arte apontou: ${problems} Não consegui refazer agora; confira a arte ou crie de novo.`);
+        }
+      } else {
+        alerts.push(`A avaliação de direção de arte apontou: ${problems} Confira a arte ou crie de novo.`);
+      }
+    }
 
     // a arte vai para a peça: se o post ainda não virou peça, cria agora
     if (!card) card = await createCardFromEntry(db, client, { ...entry, art: [] });
@@ -222,6 +270,7 @@ export async function POST(request) {
     const note = [
       `Arte criada (${art.length} ${art.length === 1 ? "imagem" : "imagens"}). Material lido: ${assets.photos.length} foto(s) anexada(s)${assets.logo ? ", logo" : ""}${assets.references.length ? `, ${assets.references.length} imagem(ns) de referência` : ""}${assets.examples.length ? `, ${assets.examples.length} post(s) de exemplo` : ""}.`,
       design.resumo,
+      review ? `Avaliação de direção de arte: nota ${review.nota ?? "-"}${review.aprovada ? ", aprovada" : ""}.` : "",
       alerts.length ? "Atenção:\n" + alerts.map((a) => "- " + a).join("\n") : ""
     ]
       .filter(Boolean)
@@ -229,7 +278,7 @@ export async function POST(request) {
     const { data: comment } = await db.from("card_comments").insert({ card_id: card.id, body: note, internal: true }).select("id").maybeSingle();
     if (comment) await db.from("card_comments").update({ author_name: "Equipe Up!", author_role: "funcionario" }).eq("id", comment.id);
 
-    return Response.json({ ok: true, art, card_id: card.id, entry_id: entry?.id || null, resumo: design.resumo, alertas: alerts });
+    return Response.json({ ok: true, art, card_id: card.id, entry_id: entry?.id || null, resumo: design.resumo, alertas: alerts, avaliacao: review });
   } catch (err) {
     if (err instanceof ContentAgentError) return Response.json({ error: err.message }, { status: 502 });
     console.error("arte:", err);
