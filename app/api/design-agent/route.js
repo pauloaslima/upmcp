@@ -149,7 +149,7 @@ export async function POST(request) {
     if (oldPaths.length) await db.storage.from("anexos").remove(oldPaths);
 
     const note = [
-      `Arte criada (${art.length} ${art.length === 1 ? "imagem" : "imagens"}). Material lido: ${assets.photos.length} foto(s) anexada(s)${assets.logo ? ", logo" : ""}${assets.examples.length ? `, ${assets.examples.length} post(s) de exemplo` : ""}.`,
+      `Arte criada (${art.length} ${art.length === 1 ? "imagem" : "imagens"}). Material lido: ${assets.photos.length} foto(s) anexada(s)${assets.logo ? ", logo" : ""}${assets.references.length ? `, ${assets.references.length} imagem(ns) de referência` : ""}${assets.examples.length ? `, ${assets.examples.length} post(s) de exemplo` : ""}.`,
       design.resumo,
       alerts.length ? "Atenção:\n" + alerts.map((a) => "- " + a).join("\n") : ""
     ]
@@ -235,8 +235,17 @@ async function loadAssets(db, client, entry, card) {
   const seen = new Set();
   const unique = (list) => list.filter((f) => (seen.has(f.path) ? false : seen.add(f.path)));
 
-  // tudo o que está anexado no post e na peça (menos artes antigas)
-  const attached = unique([...uploads(entry?.photos), ...uploads(card?.attachments)]);
+  // imagens de referência (modelo a seguir): as do post e as que foram para a peça
+  const refFiles = unique([...uploads(entry?.refs), ...uploads(card?.attachments).filter((f) => f.ref)]).filter((f) => IMAGE.test(f.name || f.path));
+  const references = [];
+  for (const f of refFiles.slice(0, 4)) {
+    const buffer = await download(db, f);
+    if (buffer) references.push({ name: f.name, preview: await preview(buffer, 768) });
+  }
+  const refLinks = [...(entry?.refs || []), ...(card?.attachments || [])].filter((r) => r?.type === "link" && r.url).map((r) => r.url);
+
+  // tudo o que está anexado no post e na peça para entrar na arte (menos artes antigas e referências)
+  const attached = unique([...uploads(entry?.photos), ...uploads(card?.attachments).filter((f) => !f.ref)]);
 
   // logo: primeiro a anexada na peça/post, depois a dos materiais do cliente
   let logo = null;
@@ -268,5 +277,5 @@ async function loadAssets(db, client, entry, card) {
     if (buffer) examples.push({ name: f.name, preview: await preview(buffer, 512) });
   }
 
-  return { photos, logo, examples };
+  return { photos, logo, examples, references, refLinks: [...new Set(refLinks)].slice(0, 8) };
 }

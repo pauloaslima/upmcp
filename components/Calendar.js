@@ -291,6 +291,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
   const [newRef, setNewRef] = useState("");
   const uploadedNow = useRef([]); // fotos enviadas nesta edição (apagadas se cancelar)
   const photoRef = useRef(null);
+  const refImgRef = useRef(null);
   const themeRef = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = () => {
@@ -312,6 +313,25 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     } catch (err) {
       console.error(err);
       showToast?.("Não consegui subir a foto.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // imagens de referência: modelo para o designer seguir (não entram na arte)
+  async function addRefImages(e) {
+    const list = [...e.target.files];
+    e.target.value = "";
+    if (!list.length || !client) return;
+    setUploading(true);
+    try {
+      const added = [];
+      for (const f of list) added.push({ ...(await uploadFile(`calendar/${client.id}/${day}/referencias`, f)), ref: true });
+      uploadedNow.current.push(...added);
+      setValues((v) => ({ ...v, refs: [...v.refs, ...added] }));
+    } catch (err) {
+      console.error(err);
+      showToast?.("Não consegui subir a imagem de referência.");
     } finally {
       setUploading(false);
     }
@@ -395,7 +415,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     }
   }
 
-  // "✨ Gerar conteúdo" de um post que já existe: desenvolve tema e briefing e preenche os campos
+  // "✨ Gerar conteúdo" de um post que já existe: lê o que já está escrito (mesmo sem salvar),
+  // mantém tudo o que está preenchido e completa só os campos vazios
   async function generateExisting() {
     if (briefStatus !== "rascunho") {
       showToast?.("O briefing deste post já está pronto ou enviado ao design. Volte para rascunho para gerar de novo.");
@@ -407,7 +428,12 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
       const res = await fetch("/api/content-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
-        body: JSON.stringify({ mode: "entry", client_id: client.id, entry_id: entry.id })
+        body: JSON.stringify({
+          mode: "entry",
+          client_id: client.id,
+          entry_id: entry.id,
+          draft: { theme: values.theme, format: values.format, editorial_line: values.editorial_line, post_time: values.post_time, notes: values.notes, brief }
+        })
       });
       const json = await res.json().catch(() => ({}));
       const r = json.atualizados?.[0];
@@ -415,16 +441,26 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
         showToast?.(json.error || "Não consegui gerar o conteúdo agora.");
         return;
       }
+      const keep = (mine, theirs) => (String(mine || "").trim() ? mine : theirs || mine);
       setValues((v) => ({
         ...v,
-        theme: r.theme || v.theme,
-        format: r.format || v.format,
-        editorial_line: r.editorial_line || v.editorial_line,
-        post_time: r.post_time || v.post_time,
-        notes: r.notes || v.notes
+        theme: keep(v.theme, r.theme),
+        format: keep(v.format, r.format),
+        editorial_line: keep(v.editorial_line, r.editorial_line),
+        post_time: keep(v.post_time, r.post_time),
+        notes: keep(v.notes, r.notes)
       }));
-      setBrief(briefWithDefaults(r, day));
-      showToast?.("Conteúdo gerado. Revise e clique em Salvar.");
+      const generated = briefWithDefaults(r, day);
+      setBrief((b) =>
+        Object.fromEntries(
+          Object.keys({ ...generated, ...b }).map((k) => {
+            const mine = b[k];
+            const filled = Array.isArray(mine) ? mine.length > 0 : String(mine ?? "").trim() !== "";
+            return [k, filled ? mine : generated[k]];
+          })
+        )
+      );
+      showToast?.("Conteúdo gerado nos campos que estavam vazios. Revise e clique em Salvar.");
     } catch (err) {
       console.error(err);
       showToast?.("Não consegui falar com o servidor. Confira a internet e tente de novo.");
@@ -443,6 +479,8 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
     const kept = new Set(values.photos.map((p) => p.path));
     // fotos tiradas da lista: apaga o arquivo
     (entry?.photos || []).filter((p) => !kept.has(p.path)).forEach(removeFile);
+    const keptRefs = new Set(values.refs.map((r) => r.path).filter(Boolean));
+    (entry?.refs || []).filter((r) => r.type === "upload" && !keptRefs.has(r.path)).forEach(removeFile);
     uploadedNow.current = [];
     const ok = await onSave({
       format: values.format,
@@ -600,6 +638,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
               )}
               <div>
                 <label>Fotos para o post</label>
+                <p className="hint field-hint">O que vai dentro da arte: fotos do produto, do espaço, da equipe…</p>
                 <AttachmentList
                   attachments={values.photos}
                   showToast={showToast}
@@ -615,6 +654,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
 
               <div>
                 <label>Referências</label>
+                <p className="hint field-hint">Modelos para o designer seguir (estilo, composição, tipografia). Não entram na arte.</p>
                 <AttachmentList
                   attachments={values.refs}
                   showToast={showToast}
@@ -636,6 +676,12 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                   <button type="button" className="btn btn-plain" onClick={addRef} disabled={!newRef.trim()}>
                     Adicionar
                   </button>
+                </div>
+                <div className="attach-row" style={{ marginTop: 6 }}>
+                  <button type="button" className="file-btn" disabled={uploading} onClick={() => refImgRef.current?.click()}>
+                    🖼 {uploading ? "Enviando…" : "Enviar imagens de referência"}
+                  </button>
+                  <input type="file" accept="image/*" multiple hidden ref={refImgRef} onChange={addRefImages} />
                 </div>
                 <textarea
                   rows={2}

@@ -38,3 +38,4 @@
 /* barra com "Gerar conteúdo" e "Criar arte" no editor do post e na peça */
 .editor-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
 .editor-tools .hint { margin: 0 0 0 auto; font-size: 11.5px; }
+.field-hint { margin: -2px 0 6px; font-size: 11.5px; }

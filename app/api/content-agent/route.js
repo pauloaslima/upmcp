@@ -96,10 +96,12 @@ async function applyDeveloped(db, client, planned, desenvolvidos) {
     const merged = {
       ...d,
       day: original.day,
+      theme: original.theme?.trim() ? original.theme : d.theme,
       format: original.format || d.format,
       post_time: original.post_time || d.post_time,
       notes: original.notes || d.notes,
-      editorial_line: original.editorial_line || d.editorial_line
+      editorial_line: original.editorial_line || d.editorial_line,
+      brief: keepFilled(original.brief, d.brief)
     };
     const { rows } = cleanAgentEntries(client.id, [merged]);
     if (!rows.length) continue;
@@ -110,12 +112,39 @@ async function applyDeveloped(db, client, planned, desenvolvidos) {
   return updated;
 }
 
+// Briefing: o que a equipe já escreveu fica; o agente só preenche as partes vazias
+function keepFilled(current, generated) {
+  const out = { ...(generated || {}) };
+  for (const [k, v] of Object.entries(current || {})) {
+    const filled = Array.isArray(v) ? v.length > 0 : typeof v === "string" ? v.trim() !== "" : v !== null && v !== undefined;
+    if (filled) out[k] = v;
+  }
+  return out;
+}
+
+// O que está na tela do editor e ainda não foi salvo vale mais que o que está gravado
+function withDraft(entry, draft) {
+  if (!draft || typeof draft !== "object") return entry;
+  const pick = (k) => (typeof draft[k] === "string" && draft[k].trim() ? draft[k].trim() : entry[k]);
+  return {
+    ...entry,
+    theme: pick("theme"),
+    format: pick("format"),
+    editorial_line: pick("editorial_line"),
+    post_time: pick("post_time"),
+    notes: pick("notes"),
+    // o que está escrito na tela vale mais que o que está gravado
+    brief: { ...(entry.brief || {}), ...(draft.brief && typeof draft.brief === "object" ? keepFilled(draft.brief, {}) : {}) }
+  };
+}
+
 // Um post só: gera o conteúdo (briefing, texto da peça…) de um tema específico do calendário.
 // Útil para demandas que chegam do Backlog depois que o mês já foi planejado.
 async function runEntry(db, client, body) {
-  const { data: entry } = body.entry_id
+  const { data: saved } = body.entry_id
     ? await db.from("calendar_entries").select(ENTRY_FIELDS + ", client_id, card_id").eq("id", body.entry_id).maybeSingle()
     : { data: null };
+  const entry = saved ? withDraft(saved, body.draft) : null;
   if (!entry || entry.client_id !== client.id) return Response.json({ error: "Tema não encontrado." }, { status: 404 });
   if (entry.brief_status && entry.brief_status !== "rascunho") {
     return Response.json({ error: "O briefing deste post já está pronto ou enviado ao design. Reabra o briefing para gerar de novo." }, { status: 409 });
