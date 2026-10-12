@@ -112,6 +112,7 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
     };
   }, []);
   const [guidance, setGuidance] = useState("");
+  const [enhance, setEnhance] = useState(false);
   const [picked, setPicked] = useState(() => new Set(entries.filter((e) => single || !e.art?.length).map((e) => e.id)));
   const [status, setStatus] = useState({}); // entry id -> { state: "fila" | "criando" | "ok" | "erro", msg, alertas }
   const [running, setRunning] = useState(false);
@@ -124,7 +125,7 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
       const res = await fetch("/api/design-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
-        body: JSON.stringify({ client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance })
+        body: JSON.stringify({ client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance, enhance })
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -210,6 +211,14 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
               })}
             </div>
           </div>
+
+          <label className="sensitive-toggle art-enhance">
+            <input type="checkbox" checked={enhance} onChange={(e) => setEnhance(e.target.checked)} disabled={running} />
+            <span>
+              <strong>Melhorar as fotos</strong> | corrige luz, cor e nitidez das fotos anexadas antes de montar a arte
+              {caps?.geracao ? " (as muito fracas passam por um tratamento mais forte)" : ""}. As originais continuam anexadas.
+            </span>
+          </label>
 
           <div>
             <label htmlFor="art-guidance">Orientação para o designer (opcional)</label>

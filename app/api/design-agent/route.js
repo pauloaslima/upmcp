@@ -8,7 +8,8 @@ import { brandFiles, materialsOf } from "../../../lib/profileFields";
 import { createCardFromEntry } from "../../../lib/production";
 import { ART_FORMATS } from "../../../lib/pipeline";
 import { removeTextFromPhoto } from "../../../lib/photoClean";
-import { generatePhoto, imageGenEnabled, removeTextAI } from "../../../lib/openaiImages";
+import { enhancePhotoAI, generatePhoto, imageGenEnabled, removeTextAI } from "../../../lib/openaiImages";
+import { enhanceLocal } from "../../../lib/photoEnhance";
 
 // Cria a arte de um post (Estático, Carrossel ou Story) e já anexa na peça da Linha de produção.
 // Só a equipe logada. POST { client_id, entry_id | card_id, mode: "material" | "ia", guidance }
@@ -19,6 +20,7 @@ import { generatePhoto, imageGenEnabled, removeTextAI } from "../../../lib/opena
 //   material: usa só o que já está anexado (fotos, logo) e as cores do cliente
 //   ia: usa o que está anexado e, quando faltar foto, escolhe uma de banco de imagens ligada ao tema
 //   gerar: usa o que está anexado e, quando faltar foto, gera uma imagem nova (OpenAI; precisa de OPENAI_API_KEY)
+//   enhance: true melhora as fotos anexadas usadas na arte (ajuste leve em todas; as fracas passam pela OpenAI)
 // GET devolve o que está configurado: { geracao, banco }
 // As imagens ficam na pasta da peça no bucket "anexos" (quem vê a peça vê a arte).
 
@@ -132,6 +134,34 @@ export async function POST(request) {
         stockFor[o.page.index] = buffer;
         alerts.push(`Página ${o.page.index + 1}: foto de banco de imagens. Confira antes de publicar.`);
       }
+    }
+
+    // melhoria das fotos anexadas que entram na arte (opção "Melhorar as fotos")
+    if (body.enhance) {
+      const used = [...new Set(design.paginas.map((p) => p.foto).filter((i) => i >= 0 && assets.photos[i]))];
+      const weak = new Map(design.fotos_fracas.map((f) => [f.foto, f.problema]));
+      // as fracas (no máximo 2 por arte) passam pela OpenAI, mantendo tudo igual; as outras, ajuste leve
+      const viaAI = imageGenEnabled() ? used.filter((i) => weak.has(i)).slice(0, 2) : [];
+      await Promise.all(
+        used.map(async (i) => {
+          const photo = assets.photos[i];
+          if (viaAI.includes(i)) {
+            try {
+              photo.buffer = await enhancePhotoAI(photo.buffer, weak.get(i));
+              alerts.push(`Foto "${photo.name}" estava fraca e foi tratada (luz, cor e nitidez). Confira se o produto ficou igual ao original.`);
+              return;
+            } catch (err) {
+              console.error("arte: melhoria pela OpenAI falhou", err?.message);
+            }
+          }
+          try {
+            photo.buffer = await enhanceLocal(photo.buffer);
+          } catch (err) {
+            console.error("arte: ajuste leve falhou", err?.message);
+          }
+        })
+      );
+      if (used.length) alerts.push(`Fotos ajustadas: ${used.length} (luz, contraste e nitidez). As originais continuam anexadas.`);
     }
 
     // imagens novas (OpenAI) para as páginas de foto sem foto anexada
