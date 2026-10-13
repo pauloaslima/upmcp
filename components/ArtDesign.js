@@ -52,15 +52,68 @@ export function ArtThumb({ art, size = "xs", title = "Arte criada" }) {
   );
 }
 
-// Todas as páginas, clicáveis (abrem a imagem em tamanho real)
-export function ArtStrip({ art }) {
+// Todas as páginas, clicáveis (abrem a imagem em tamanho real).
+// feedback: mostra "Aprovar" e "Reprovar" (só a equipe), que ensinam as próximas artes do cliente
+export function ArtStrip({ art, feedback = false }) {
   const pages = (art || []).filter((a) => a?.path);
   if (!pages.length) return null;
   return (
-    <div className="art-strip">
-      {pages.map((a, i) => (
-        <ArtPage key={a.path} att={a} index={i} />
-      ))}
+    <>
+      <div className="art-strip">
+        {pages.map((a, i) => (
+          <ArtPage key={a.path} att={a} index={i} />
+        ))}
+      </div>
+      {feedback && pages[0].run && <ArtFeedback runId={pages[0].run} />}
+    </>
+  );
+}
+
+async function callArt(body) {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch("/api/design-agent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
+    body: JSON.stringify(body)
+  });
+  const json = await res.json().catch(() => ({}));
+  return { ok: res.ok, json };
+}
+
+// Decisão da equipe sobre a arte: aprovada vira referência; reprovada (com motivo) vira erro a evitar
+function ArtFeedback({ runId }) {
+  const [state, setState] = useState(null); // null | "motivo" | "enviando" | { done: texto } | { erro: texto }
+  const [motivo, setMotivo] = useState("");
+  async function send(aprovado) {
+    setState("enviando");
+    const { ok, json } = await callArt({ action: "feedback", run_id: runId, aprovado, motivo });
+    setState(ok ? { done: aprovado ? "Aprovada. Vira referência para as próximas artes deste cliente." : "Reprovada. O motivo fica registrado para as próximas artes evitarem esse erro." } : { erro: json.error || "Não consegui registrar." });
+  }
+  if (state?.done) return <p className="hint art-feedback-done">✓ {state.done}</p>;
+  return (
+    <div className="art-feedback">
+      {state === "motivo" ? (
+        <>
+          <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que reprovou? (ex.: foto pequena na página 4, título longo na capa)" autoFocus />
+          <button type="button" className="btn btn-plain btn-sm" onClick={() => setState(null)}>
+            Cancelar
+          </button>
+          <button type="button" className="btn btn-gold btn-sm" onClick={() => send(false)} disabled={!motivo.trim()}>
+            Reprovar
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="hint">A arte ficou boa?</span>
+          <button type="button" className="btn btn-plain btn-sm" onClick={() => send(true)} disabled={state === "enviando"}>
+            👍 Aprovar
+          </button>
+          <button type="button" className="btn btn-plain btn-sm" onClick={() => setState("motivo")} disabled={state === "enviando"}>
+            👎 Reprovar
+          </button>
+        </>
+      )}
+      {state?.erro && <span className="hint warn">{state.erro}</span>}
     </div>
   );
 }
@@ -118,22 +171,26 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
   const [running, setRunning] = useState(false);
   const done = Object.values(status).filter((s) => s.state === "ok" || s.state === "erro").length;
 
+  // a arte passa por etapas (planejamento, montagem, avaliação e refinamento): a janela vai pedindo
+  // "continuar" até a rodada terminar, mostrando a etapa e o ciclo
   async function createOne(entry) {
-    setStatus((s) => ({ ...s, [entry.id]: { state: "criando" } }));
+    setStatus((s) => ({ ...s, [entry.id]: { state: "criando", etapa: "Começando" } }));
     try {
-      const { data } = await supabase.auth.getSession();
-      const res = await fetch("/api/design-agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
-        body: JSON.stringify({ client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance, enhance })
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      let { ok, json } = await callArt({ action: "start", client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance, enhance });
+      let guard = 0;
+      while (ok && json.run && !json.run.final && guard++ < 12) {
+        const r = json.run;
+        setStatus((s) => ({ ...s, [entry.id]: { state: "criando", etapa: r.etapa, ciclo: r.ciclo, max: r.max_ciclos, media: r.media } }));
+        if (r.imagens?.length) onCreated?.({ ...entry, art: r.art, card_id: r.card_id });
+        ({ ok, json } = await callArt({ action: "continue", run_id: r.id }));
+      }
+      if (!ok || !json.run) {
         setStatus((s) => ({ ...s, [entry.id]: { state: "erro", msg: json.error || "Não consegui criar a arte." } }));
         return false;
       }
-      onCreated?.({ ...entry, art: json.art, card_id: json.card_id });
-      setStatus((s) => ({ ...s, [entry.id]: { state: "ok", alertas: json.alertas || [] } }));
+      const r = json.run;
+      onCreated?.({ ...entry, art: r.art, card_id: r.card_id });
+      setStatus((s) => ({ ...s, [entry.id]: { state: "ok", run: r } }));
       return true;
     } catch (err) {
       console.error(err);
@@ -261,7 +318,7 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
         <div className="modal-foot">
           {running && (
             <span className="hint">
-              <span className="spinner small" aria-hidden="true"></span> Criando{single ? "" : ` ${done + 1} de ${Object.keys(status).length}`}… leva cerca de 1 minuto por post.
+              <span className="spinner small" aria-hidden="true"></span> Criando{single ? "" : ` ${done + 1} de ${Object.keys(status).length}`}… cada arte passa por planejamento, avaliação e refinamento (de 3 a 8 minutos). Não feche esta janela.
             </span>
           )}
           <button type="button" className="btn btn-plain" onClick={onClose} disabled={running}>
@@ -284,20 +341,39 @@ function ArtStatus({ st }) {
   if (st.state === "criando")
     return (
       <span className="art-st">
-        <span className="spinner small" aria-hidden="true"></span> criando…
+        <span className="spinner small" aria-hidden="true"></span> {st.etapa || "criando"}
+        {st.max ? ` · ciclo ${st.ciclo} de ${st.max}` : ""}
+        {st.media != null ? ` · nota ${st.media}` : ""}…
       </span>
     );
   if (st.state === "erro") return <span className="art-st erro">{st.msg}</span>;
+  const r = st.run;
+  const approved = r.status === "aprovada";
   return (
-    <span className="art-st ok">
-      ✓ arte anexada na peça
-      {st.alertas?.length > 0 && (
+    <span className={"art-st " + (approved ? "ok" : "warn")}>
+      {approved ? "✓ Aprovada na avaliação" : "⚠ Precisa de revisão da equipe"}
+      {r.media != null ? ` (nota média ${r.media}, ${r.ciclo} ciclo(s) de refinamento)` : ""}. Arte anexada na peça.
+      {r.montagem && (
+        <a className="art-sheet" href={r.montagem} target="_blank" rel="noopener noreferrer">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={r.montagem} alt="Todas as páginas" />
+        </a>
+      )}
+      {!approved && r.motivos?.length > 0 && (
         <ul className="art-alerts">
-          {st.alertas.map((a, i) => (
+          {r.motivos.slice(0, 5).map((a, i) => (
+            <li key={"m" + i}>{a}</li>
+          ))}
+        </ul>
+      )}
+      {r.alertas?.length > 0 && (
+        <ul className="art-alerts">
+          {r.alertas.map((a, i) => (
             <li key={i}>{a}</li>
           ))}
         </ul>
       )}
+      <ArtFeedback runId={r.id} />
     </span>
   );
 }

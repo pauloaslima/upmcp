@@ -6,7 +6,7 @@ import { handleMcpMessage } from "../../../../lib/mcpServer";
 // Trate esse endereço como uma senha.
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300; // as ferramentas de arte usam até ~250 s por chamada
 
 function authorized(key) {
   const expected = process.env.AGENT_API_KEY;

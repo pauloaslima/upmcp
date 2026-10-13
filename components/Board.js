@@ -1010,7 +1010,7 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
               <div className="section-label" style={{ marginBottom: 8 }}>
                 Arte
               </div>
-              <ArtStrip art={(local.attachments || []).filter((a) => a?.art)} />
+              <ArtStrip art={(local.attachments || []).filter((a) => a?.art)} feedback />
             </div>
           )}
           {(local.requested_by || local.column_id === "backlog") && (

@@ -632,7 +632,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
               {art.length > 0 && (
                 <div>
                   <label>Arte</label>
-                  <ArtStrip art={art} />
+                  <ArtStrip art={art} feedback />
                   <p className="hint">A arte também está anexada na peça da Linha de produção. Para refazer, use 🎨 Criar arte.</p>
                 </div>
               )}

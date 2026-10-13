@@ -41,3 +41,11 @@
 .field-hint { margin: -2px 0 6px; font-size: 11.5px; }
 .art-enhance { align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
 .art-enhance strong { color: var(--text); }
+
+/* direção de arte: decisão da equipe e resultado da avaliação */
+.art-feedback { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.art-feedback input { flex: 1; min-width: 220px; }
+.art-feedback-done { margin-top: 8px; }
+.art-st.warn { color: var(--warn, #9a6b00); }
+.art-sheet { display: block; margin-top: 8px; max-width: 100%; }
+.art-sheet img { display: block; max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }

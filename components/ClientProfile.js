@@ -8,6 +8,7 @@ import { AttachmentList } from "./Board";
 import { useSignedUrl } from "./ArtDesign";
 
 const FIELD_KEYS = PROFILE_FIELDS.map((f) => f.key);
+const sameConfig = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
 const fileKey = (f) => [f.path || f.url, f.kind, f.nome, f.usuario, f.linha].join("~");
 const sameFiles = (a, b) => a.map(fileKey).join("|") === b.map(fileKey).join("|");
 
@@ -23,7 +24,8 @@ export function ClientProfile({ client, showToast, onSaved }) {
   const fromClient = () => ({
     ...Object.fromEntries(FIELD_KEYS.map((k) => [k, client[k] || ""])),
     drive_url: client.drive_url || "",
-    materials: allMaterials(client)
+    materials: allMaterials(client),
+    art_config: client.art_config || {}
   });
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fromClient);
@@ -49,7 +51,7 @@ export function ClientProfile({ client, showToast, onSaved }) {
 
   const saved = fromClient();
   const changed =
-    [...FIELD_KEYS, "drive_url"].some((k) => draft[k].trim() !== saved[k]) || !sameFiles(draft.materials, saved.materials);
+    [...FIELD_KEYS, "drive_url"].some((k) => draft[k].trim() !== saved[k]) || !sameFiles(draft.materials, saved.materials) || !sameConfig(draft.art_config, saved.art_config);
 
   function startEdit(prefill) {
     uploadedNow.current = [];
@@ -74,7 +76,9 @@ export function ClientProfile({ client, showToast, onSaved }) {
       ...Object.fromEntries(FIELD_KEYS.map((k) => [k, draft[k].trim()])),
       drive_url: draft.drive_url.trim() ? normalizeLink(draft.drive_url) : "",
       materials: draft.materials,
-      identity_files: [] // os arquivos de identidade agora ficam em "materiais"
+      identity_files: [], // os arquivos de identidade agora ficam em "materiais"
+      // a configuração de arte só vai junto quando muda (precisa do SQL 017)
+      ...(sameConfig(draft.art_config, saved.art_config) ? {} : { art_config: draft.art_config })
     };
     setSaving(true);
     const { error } = await supabase.from("clients").update(patch).eq("id", client.id);
@@ -237,6 +241,12 @@ export function ClientProfile({ client, showToast, onSaved }) {
         onRemove={(target) => setDraft((d) => ({ ...d, materials: d.materials.filter((m) => m !== target) }))}
       />
 
+      <ArtConfig
+        value={v.art_config || {}}
+        editing={editing}
+        onChange={(patch) => setDraft((d) => ({ ...d, art_config: { ...(d.art_config || {}), ...patch } }))}
+      />
+
       <div className="profile-grid">
         {PROFILE_FIELDS.map((f) => (
           <div key={f.key} className={"profile-field" + (f.key === "notes" ? " wide" : "")}>
@@ -279,6 +289,85 @@ export function ClientProfile({ client, showToast, onSaved }) {
         consultam todo este perfil.
       </div>
     </section>
+  );
+}
+
+// Direção de arte do cliente: o que os agentes de design seguem em todas as artes deste cliente
+const ART_OPTIONS = {
+  fonte_titulo: [
+    ["", "Escolha do diretor de arte"],
+    ["Montserrat", "Sem serifa moderna (Montserrat)"],
+    ["Playfair", "Serifa editorial elegante (Playfair)"],
+    ["Cormorant", "Serifa refinada e delicada (Cormorant)"],
+    ["Anton", "Condensada de impacto (Anton)"]
+  ],
+  fonte_manuscrita: [
+    ["", "Escolha do diretor de arte"],
+    ["GreatVibes", "Caligrafia elegante"],
+    ["Pacifico", "Manuscrita descontraída"],
+    ["nenhuma", "Não usar letra manuscrita"]
+  ],
+  marca: [
+    ["", "Automático (assinatura com foto, se houver; senão a logo)"],
+    ["logo", "Logo no canto"],
+    ["assinatura_rodape", "Assinatura com foto no rodapé"],
+    ["nome_topo", "Nome e profissão no topo"]
+  ],
+  ciclos: [
+    ["", "3 ciclos (padrão)"],
+    ["2", "2 ciclos"],
+    ["1", "1 ciclo"]
+  ]
+};
+const ART_TEXTS = [
+  ["cores", "Cores da marca", "Códigos das cores, ex.: #F3EEE8, #5B4A66, #8C6F9E"],
+  ["estilo_foto", "Estilo das fotos", "Ex.: retratos com luz natural suave, tons quentes, fundo de consultório claro"],
+  ["linguagem_grafica", "Linguagem gráfica", "Ex.: formas orgânicas suaves, ícones de linha fina, muito respiro"],
+  ["evitar", "O que evitar nas artes", "Ex.: faixas brancas, fundo preto, fotos de banco com pessoas posadas"]
+];
+
+function ArtConfig({ value, editing, onChange }) {
+  const label = (key, v) => ART_OPTIONS[key].find(([id]) => id === (v || ""))?.[1] || v;
+  return (
+    <div className="art-config">
+      <div className="materials-head">
+        <label>Direção de arte</label>
+        <span className="hint">Os agentes de design seguem estas escolhas em todas as artes deste cliente. Em branco, o diretor de arte decide pela identidade visual.</span>
+      </div>
+      <div className="art-config-grid">
+        {[
+          ["fonte_titulo", "Fonte dos títulos"],
+          ["fonte_manuscrita", "Letra manuscrita"],
+          ["marca", "Marca nas artes"],
+          ["ciclos", "Ciclos de refinamento"]
+        ].map(([key, title]) => (
+          <div key={key} className="profile-field">
+            <label htmlFor={"ac-" + key}>{title}</label>
+            {editing ? (
+              <select id={"ac-" + key} value={value[key] || ""} onChange={(e) => onChange({ [key]: e.target.value })}>
+                {ART_OPTIONS[key].map(([id, text]) => (
+                  <option key={id} value={id}>
+                    {text}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="profile-read">{label(key, value[key])}</div>
+            )}
+          </div>
+        ))}
+        {ART_TEXTS.map(([key, title, placeholder]) => (
+          <div key={key} className="profile-field">
+            <label htmlFor={"ac-" + key}>{title}</label>
+            {editing ? (
+              <input id={"ac-" + key} value={value[key] || ""} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={placeholder} />
+            ) : (
+              <div className={"profile-read" + (value[key] ? "" : " empty")}>{value[key] || "Não preenchido."}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
