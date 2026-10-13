@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeLink, removeFile, uploadFile } from "../lib/files";
-import { MATERIAL_ACCEPT, MATERIAL_CATEGORIES, PROFILE_FIELDS } from "../lib/profileFields";
+import { BRAND_KIT, MATERIAL_ACCEPT, MATERIAL_CATEGORIES, PROFILE_FIELDS } from "../lib/profileFields";
 import { AttachmentList } from "./Board";
+import { useSignedUrl } from "./ArtDesign";
 
 const FIELD_KEYS = PROFILE_FIELDS.map((f) => f.key);
-const sameFiles = (a, b) => a.map((f) => f.path || f.url).join("|") === b.map((f) => f.path || f.url).join("|");
+const fileKey = (f) => [f.path || f.url, f.kind, f.nome, f.usuario, f.linha].join("~");
+const sameFiles = (a, b) => a.map(fileKey).join("|") === b.map(fileKey).join("|");
 
 // arquivos antigos de "identidade visual" passam a fazer parte dos materiais (categoria Identidade de marca)
 function allMaterials(client) {
@@ -91,7 +93,7 @@ export function ClientProfile({ client, showToast, onSaved }) {
     showToast("Perfil do cliente salvo.");
   }
 
-  async function handleFiles(e) {
+  async function handleFiles(e, category = uploadCategory) {
     const files = [...e.target.files];
     e.target.value = "";
     if (!files.length) return;
@@ -100,7 +102,7 @@ export function ClientProfile({ client, showToast, onSaved }) {
     for (const file of files) {
       try {
         const att = await uploadFile(`clients/${client.id}/materiais`, file);
-        added.push({ ...att, category: uploadCategory, size: file.size });
+        added.push({ ...att, category, size: file.size, ...(category === BRAND_KIT ? { kind: "logo" } : {}) });
       } catch (err) {
         console.error(err);
         showToast("Não consegui subir " + file.name + ".");
@@ -226,6 +228,15 @@ export function ClientProfile({ client, showToast, onSaved }) {
         )}
       </div>
 
+      <BrandKit
+        items={v.materials.filter((m) => m.category === BRAND_KIT)}
+        editing={editing}
+        uploading={uploading}
+        onFiles={(e) => handleFiles(e, BRAND_KIT)}
+        onChange={(target, patch) => setDraft((d) => ({ ...d, materials: d.materials.map((m) => (m === target ? { ...m, ...patch } : m)) }))}
+        onRemove={(target) => setDraft((d) => ({ ...d, materials: d.materials.filter((m) => m !== target) }))}
+      />
+
       <div className="profile-grid">
         {PROFILE_FIELDS.map((f) => (
           <div key={f.key} className={"profile-field" + (f.key === "notes" ? " wide" : "")}>
@@ -268,6 +279,78 @@ export function ClientProfile({ client, showToast, onSaved }) {
         consultam todo este perfil.
       </div>
     </section>
+  );
+}
+
+// Logo e assinatura: o que entra nas artes criadas pelo designer.
+// Logo = arquivo da marca. Foto de perfil = assinatura (foto redonda + nome + @ + linha extra, ex.: CRP).
+function BrandKit({ items, editing, uploading, onFiles, onChange, onRemove }) {
+  const ref = useRef(null);
+  return (
+    <div className="brand-kit">
+      <div className="materials-head">
+        <label>Logo e assinatura das artes</label>
+        <span className="hint">O designer usa somente o que estiver aqui. Envie a logo (de preferência PNG sem fundo) ou a foto de perfil do cliente para assinar as artes.</span>
+      </div>
+      {items.length === 0 && <div className="profile-read empty">Nenhuma logo enviada. As artes saem sem logo até enviar aqui.</div>}
+      {items.length > 0 && (
+        <div className="brand-kit-grid">
+          {items.map((it) => (
+            <BrandItem key={it.path} item={it} editing={editing} onChange={(p) => onChange(it, p)} onRemove={() => onRemove(it)} />
+          ))}
+        </div>
+      )}
+      {editing && (
+        <div className="materials-upload">
+          <button className="file-btn" disabled={uploading} onClick={() => ref.current?.click()}>
+            🏷️ {uploading ? "Enviando…" : "Enviar logo ou foto de perfil"}
+          </button>
+          <input type="file" multiple accept=".png,.jpg,.jpeg,.webp,.svg" ref={ref} hidden onChange={onFiles} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BrandItem({ item, editing, onChange, onRemove }) {
+  const url = useSignedUrl(item.path);
+  const perfil = item.kind === "perfil";
+  return (
+    <div className="brand-item">
+      <span className={"brand-thumb" + (perfil ? " round" : "")}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {url ? <img src={url} alt={item.name} /> : null}
+      </span>
+      <div className="brand-info">
+        {editing ? (
+          <>
+            <select value={perfil ? "perfil" : "logo"} onChange={(e) => onChange({ kind: e.target.value })} aria-label="Tipo">
+              <option value="logo">Logo</option>
+              <option value="perfil">Foto de perfil (assinatura)</option>
+            </select>
+            {perfil && (
+              <>
+                <input value={item.nome || ""} onChange={(e) => onChange({ nome: e.target.value })} placeholder="Nome (ex.: Ludmila do Valle)" />
+                <input value={item.usuario || ""} onChange={(e) => onChange({ usuario: e.target.value })} placeholder="@ do Instagram" />
+                <input value={item.linha || ""} onChange={(e) => onChange({ linha: e.target.value })} placeholder="Linha extra (ex.: CRP 14/05727-1)" />
+              </>
+            )}
+            <button className="btn btn-plain btn-sm" onClick={onRemove}>
+              Remover
+            </button>
+          </>
+        ) : (
+          <>
+            <strong>{perfil ? "Assinatura" : "Logo"}</strong>
+            {perfil ? (
+              <span className="hint">{[item.nome, item.usuario && "@" + item.usuario.replace(/^@/, ""), item.linha].filter(Boolean).join(" · ") || "Sem nome. Clique em Editar para preencher."}</span>
+            ) : (
+              <span className="hint">{item.name}</span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

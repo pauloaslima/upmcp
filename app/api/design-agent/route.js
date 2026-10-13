@@ -4,7 +4,7 @@ import { ContentAgentError } from "../../../lib/contentAgent";
 import { chooseStockPhotos, designArt, reviewArt } from "../../../lib/designAgent";
 import { photoBox, renderArt, sizeFor } from "../../../lib/artRender";
 import { downloadStock, findStockCandidates, stockEnabled } from "../../../lib/stockPhotos";
-import { brandFiles, materialsOf } from "../../../lib/profileFields";
+import { brandKit, materialsOf } from "../../../lib/profileFields";
 import { createCardFromEntry } from "../../../lib/production";
 import { ART_FORMATS } from "../../../lib/pipeline";
 import { removeTextFromPhoto } from "../../../lib/photoClean";
@@ -77,7 +77,7 @@ export async function POST(request) {
   try {
     const alerts = [];
     const assets = await loadAssets(db, client, entry, card);
-    if (!assets.logo) alerts.push("Não encontrei a logo: anexe na peça ou nos materiais de identidade do cliente um arquivo com \"logo\" no nome. A arte saiu sem logo.");
+    if (!assets.logo && !assets.signature) alerts.push("O cliente não tem logo: envie no perfil do cliente, seção \"Logo e assinatura das artes\". A arte saiu sem logo.");
     const genAllowed = mode === "gerar" && imageGenEnabled();
     // sem gerador configurado, "gerar" cai para o banco de imagens
     const stockAllowed = (mode === "ia" || (mode === "gerar" && !genAllowed)) && stockEnabled();
@@ -201,7 +201,7 @@ export async function POST(request) {
       photos.push(buffer ? await cropTo(buffer, box) : null);
     }
 
-    let pngs = await renderArt({ design, format, photos, logo: assets.logo });
+    let pngs = await renderArt({ design, format, photos, logo: assets.logo, signature: assets.signature });
 
     // etapas 6 e 7 da direção de arte: avaliar a arte pronta e, se estiver fraca, refazer uma vez
     let review = null;
@@ -233,7 +233,7 @@ export async function POST(request) {
             const buffer = box && page.foto >= 0 ? pool[page.foto]?.buffer : null;
             redoPhotos.push(buffer ? await cropTo(buffer, box) : null);
           }
-          pngs = await renderArt({ design: redo, format, photos: redoPhotos, logo: assets.logo });
+          pngs = await renderArt({ design: redo, format, photos: redoPhotos, logo: assets.logo, signature: assets.signature });
           design = redo;
           alerts.push(`A primeira versão foi reprovada na avaliação de direção de arte (${problems}) e a arte foi refeita.`, ...redo.alertas);
         } catch (err) {
@@ -268,7 +268,7 @@ export async function POST(request) {
     if (oldPaths.length) await db.storage.from("anexos").remove(oldPaths);
 
     const note = [
-      `Arte criada (${art.length} ${art.length === 1 ? "imagem" : "imagens"}). Material lido: ${assets.photos.length} foto(s) anexada(s)${assets.logo ? ", logo" : ""}${assets.references.length ? `, ${assets.references.length} imagem(ns) de referência` : ""}${assets.examples.length ? `, ${assets.examples.length} post(s) de exemplo` : ""}.`,
+      `Arte criada (${art.length} ${art.length === 1 ? "imagem" : "imagens"}). Material lido: ${assets.photos.length} foto(s) anexada(s)${assets.logo ? ", logo" : ""}${assets.signature ? ", assinatura" : ""}${assets.references.length ? `, ${assets.references.length} imagem(ns) de referência` : ""}${assets.examples.length ? `, ${assets.examples.length} post(s) de exemplo` : ""}.`,
       design.resumo,
       review ? `Avaliação de direção de arte: nota ${review.nota ?? "-"}${review.aprovada ? ", aprovada" : ""}.` : "",
       alerts.length ? "Atenção:\n" + alerts.map((a) => "- " + a).join("\n") : ""
@@ -350,6 +350,12 @@ async function logoFrom(buffer) {
   return { src: "data:image/png;base64," + png.toString("base64"), width: meta.width, height: meta.height, light, preview: await preview(png, 400) };
 }
 
+// foto de perfil recortada em quadrado (o rosto no centro) para a assinatura
+async function avatarFrom(buffer) {
+  const out = await sharp(buffer).rotate().resize({ width: 240, height: 240, fit: "cover", position: sharp.strategy.attention }).jpeg({ quality: 88 }).toBuffer();
+  return "data:image/jpeg;base64," + out.toString("base64");
+}
+
 async function loadAssets(db, client, entry, card) {
   const uploads = (list) => (list || []).filter((f) => f?.type === "upload" && f.path && !f.art);
   const seen = new Set();
@@ -367,17 +373,23 @@ async function loadAssets(db, client, entry, card) {
   // tudo o que está anexado no post e na peça para entrar na arte (menos artes antigas e referências)
   const attached = unique([...uploads(entry?.photos), ...uploads(card?.attachments).filter((f) => !f.ref)]);
 
-  // logo: primeiro a anexada na peça/post, depois a dos materiais do cliente
+  // logo e assinatura: somente da seção "Logo e assinatura" do perfil do cliente
+  // (nunca um anexo da peça, para não confundir prints, tabelas ou fotos com a logo)
   let logo = null;
-  const logoCandidates = [
-    ...attached.filter((f) => LOGO.test(f.name || f.path) && isLogoName(f)),
-    ...uploads(brandFiles(client)).filter((f) => LOGO.test(f.name || f.path) && isLogoName(f))
-  ];
-  for (const f of logoCandidates) {
+  let signature = null;
+  const kit = brandKit(client).filter((f) => LOGO.test(f.name || f.path));
+  for (const f of kit.filter((f) => f.kind !== "perfil")) {
     const buffer = await download(db, f);
-    if (buffer) {
-      logo = await logoFrom(buffer).catch(() => null);
-      if (logo) break;
+    if (buffer) logo = await logoFrom(buffer).catch(() => null);
+    if (logo) break;
+  }
+  for (const f of kit.filter((f) => f.kind === "perfil")) {
+    const buffer = await download(db, f);
+    const avatar = buffer && (await avatarFrom(buffer).catch(() => null));
+    if (avatar) {
+      const usuario = String(f.usuario || "").trim().replace(/^@/, "");
+      signature = { src: avatar, nome: String(f.nome || client.name || "").trim(), usuario: usuario ? "@" + usuario : "", linha: String(f.linha || "").trim() };
+      break;
     }
   }
 
@@ -397,5 +409,5 @@ async function loadAssets(db, client, entry, card) {
     if (buffer) examples.push({ name: f.name, preview: await preview(buffer, 512) });
   }
 
-  return { photos, logo, examples, references, refLinks: [...new Set(refLinks)].slice(0, 8) };
+  return { photos, logo, signature, examples, references, refLinks: [...new Set(refLinks)].slice(0, 8) };
 }

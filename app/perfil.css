@@ -29,3 +29,16 @@
 .ai-gaps { font-size: 12.5px; color: var(--text-dim); }
 .ai-gaps ul { margin: 4px 0 0; padding-left: 18px; }
 .ai-field.wide { grid-column: 1 / -1; }
+
+/* Logo e assinatura das artes */
+.brand-kit { margin: 0 0 18px; display: flex; flex-direction: column; gap: 10px; }
+.brand-kit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.brand-item { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-2); min-width: 0; }
+.brand-thumb { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(#e9e9e9 0 25%, #fff 0 50%) 0 0 / 14px 14px; }
+.brand-thumb.round { border-radius: 50%; }
+.brand-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.brand-thumb.round img { object-fit: cover; }
+.brand-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.brand-info .hint { overflow-wrap: anywhere; }
+.brand-info .btn-sm { align-self: flex-start; }
+@media (max-width: 900px) { .brand-kit-grid { grid-template-columns: 1fr; } }

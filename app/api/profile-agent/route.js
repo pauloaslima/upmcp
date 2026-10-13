@@ -22,7 +22,7 @@ export async function POST(request) {
   const { data: client } = body.client_id ? await db.from("clients").select("*").eq("id", body.client_id).maybeSingle() : { data: null };
   if (!client) return Response.json({ error: "Cliente não encontrado." }, { status: 404 });
 
-  const materials = [...(client.materials || []), ...(client.identity_files || []).map((f) => ({ ...f, category: "identidade" }))];
+  const materials = [...(client.materials || []).filter((m) => m.category !== "logo"), ...(client.identity_files || []).map((f) => ({ ...f, category: "identidade" }))];
   if (!materials.length) return Response.json({ error: "Envie os materiais do cliente antes (em Editar → Materiais do cliente)." }, { status: 400 });
 
   const { blocks, used, skipped, uploaded, sizes } = await materialsToBlocks(db, materials);
