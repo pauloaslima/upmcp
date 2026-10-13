@@ -130,29 +130,10 @@ function ArtPage({ att, index }) {
 
 export const canHaveArt = (entry) => ART_FORMATS.includes(entry?.format) && !!entry?.theme?.trim();
 
-const MODES = [
-  {
-    id: "gerar",
-    title: "Gerar imagem nova",
-    text: "Usa as fotos anexadas quando houver e, se faltar, cria uma imagem nova para o tema, no estilo da marca.",
-    needs: "geracao"
-  },
-  {
-    id: "ia",
-    title: "Criar do zero",
-    text: "Usa as fotos anexadas quando houver e, se faltar, uma foto de banco de imagens ligada ao tema."
-  },
-  {
-    id: "material",
-    title: "Usar o material do post",
-    text: "Só as fotos anexadas ao post, a logo e as cores do cliente. Sem foto, a arte sai só com texto e cores."
-  }
-];
-
 // entries: posts que podem ganhar arte; week = janela "Criar artes da semana" (senão, a arte de um post)
 export function ArtDialog({ client, entries, week = false, onCreated, onClose, showToast }) {
   const single = !week;
-  const [mode, setMode] = useState("ia");
+  const mode = "chatgpt";
   const [caps, setCaps] = useState(null); // o que está configurado no servidor: { geracao, banco }
   useEffect(() => {
     let alive = true;
@@ -165,7 +146,6 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
     };
   }, []);
   const [guidance, setGuidance] = useState("");
-  const [enhance, setEnhance] = useState(false);
   const [picked, setPicked] = useState(() => new Set(entries.filter((e) => single || !e.art?.length).map((e) => e.id)));
   const [status, setStatus] = useState({}); // entry id -> { state: "fila" | "criando" | "ok" | "erro", msg, alertas }
   const [running, setRunning] = useState(false);
@@ -176,7 +156,7 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
   async function createOne(entry) {
     setStatus((s) => ({ ...s, [entry.id]: { state: "criando", etapa: "Começando" } }));
     try {
-      let { ok, json } = await callArt({ action: "start", client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance, enhance });
+      let { ok, json } = await callArt({ action: "start", client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance });
       let guard = 0;
       while (ok && json.run && !json.run.final && guard++ < 12) {
         const r = json.run;
@@ -246,36 +226,11 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
             </div>
           )}
 
-          <div>
-            <label>Como criar</label>
-            <div className="art-modes">
-              {MODES.map((m) => {
-                const off = m.needs && caps && !caps[m.needs];
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className={"art-mode" + (mode === m.id ? " on" : "")}
-                    onClick={() => setMode(m.id)}
-                    disabled={running || off}
-                    aria-pressed={mode === m.id}
-                    title={off ? "Aguardando a configuração do gerador de imagens (OPENAI_API_KEY na Vercel)" : ""}
-                  >
-                    <strong>{m.title}</strong>
-                    <span>{off ? "Aguardando configuração na Vercel." : m.text}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="art-engine">
+            <strong>Criada pelo ChatGPT</strong> (gerador de imagens da OpenAI), com as fotos do post, o texto da peça, o briefing e a identidade do cliente.
+            A logo ou a assinatura do perfil entram por cima, sempre iguais.
+            {caps && !caps.geracao && <span className="hint warn"> Aguardando a configuração da OPENAI_API_KEY na Vercel.</span>}
           </div>
-
-          <label className="sensitive-toggle art-enhance">
-            <input type="checkbox" checked={enhance} onChange={(e) => setEnhance(e.target.checked)} disabled={running} />
-            <span>
-              <strong>Melhorar as fotos</strong> | corrige luz, cor e nitidez das fotos anexadas antes de montar a arte
-              {caps?.geracao ? " (as muito fracas passam por um tratamento mais forte)" : ""}. As originais continuam anexadas.
-            </span>
-          </label>
 
           <div>
             <label htmlFor="art-guidance">Orientação para o designer (opcional)</label>
@@ -285,7 +240,7 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
               value={guidance}
               onChange={(e) => setGuidance(e.target.value)}
               disabled={running}
-              placeholder="Ex.: usar fundo escuro, destacar o preço, foto de pessoas jogando na praia"
+              placeholder="Ex.: capa com fundo lilás, destacar a palavra ansiedade, página final com a foto sorrindo"
             />
           </div>
 
@@ -318,14 +273,14 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
         <div className="modal-foot">
           {running && (
             <span className="hint">
-              <span className="spinner small" aria-hidden="true"></span> Criando{single ? "" : ` ${done + 1} de ${Object.keys(status).length}`}… cada arte passa por planejamento, avaliação e refinamento (de 3 a 8 minutos). Não feche esta janela.
+              <span className="spinner small" aria-hidden="true"></span> Criando{single ? "" : ` ${done + 1} de ${Object.keys(status).length}`}… o ChatGPT desenha a capa e depois as outras páginas (de 1 a 5 minutos). Não feche esta janela.
             </span>
           )}
           <button type="button" className="btn btn-plain" onClick={onClose} disabled={running}>
             {finished ? "Fechar" : "Cancelar"}
           </button>
           {!finished && (
-            <button type="button" className="btn btn-gold" onClick={run} disabled={running || picked.size === 0}>
+            <button type="button" className="btn btn-gold" onClick={run} disabled={running || picked.size === 0 || (caps && !caps.geracao)}>
               {single ? "🎨 Criar arte" : `🎨 Criar ${picked.size} ${picked.size === 1 ? "arte" : "artes"}`}
             </button>
           )}
@@ -348,10 +303,10 @@ function ArtStatus({ st }) {
     );
   if (st.state === "erro") return <span className="art-st erro">{st.msg}</span>;
   const r = st.run;
-  const approved = r.status === "aprovada";
+  const approved = r.status === "aprovada" || r.status === "pronta";
   return (
     <span className={"art-st " + (approved ? "ok" : "warn")}>
-      {approved ? "✓ Aprovada na avaliação" : "⚠ Precisa de revisão da equipe"}
+      {r.status === "pronta" ? "✓ Arte pronta. Confira os textos antes de enviar" : approved ? "✓ Aprovada na avaliação" : "⚠ Precisa de revisão da equipe"}
       {r.media != null ? ` (nota média ${r.media}, ${r.ciclo} ciclo(s) de refinamento)` : ""}. Arte anexada na peça.
       {r.montagem && (
         <a className="art-sheet" href={r.montagem} target="_blank" rel="noopener noreferrer">

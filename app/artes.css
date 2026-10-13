@@ -49,3 +49,4 @@
 .art-st.warn { color: var(--warn, #9a6b00); }
 .art-sheet { display: block; margin-top: 8px; max-width: 100%; }
 .art-sheet img { display: block; max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.art-engine { padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 14px; line-height: 1.45; }
