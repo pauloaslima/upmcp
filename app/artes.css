@@ -82,5 +82,7 @@
 .art-pick-box { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 6px; border: 2px solid #fff; background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 .art-pick-box.on { background: var(--gold); border-color: var(--gold); }
 .art-page-wrap { position: relative; flex: none; display: inline-flex; }
-.art-page-edit { position: absolute; right: 4px; top: 4px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.9); font-size: 9px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); padding: 0; }
-.art-page-edit:hover { background: #fff; transform: scale(1.08); }
+.art-page-tools { position: absolute; right: 3px; top: 3px; display: flex; gap: 2px; }
+.art-page-edit { width: 15px; height: 15px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.88); font-size: 7.5px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); padding: 0; }
+.art-page-edit:hover { background: #fff; transform: scale(1.1); }
+.art-page-edit.danger:hover { background: #fde8e4; }

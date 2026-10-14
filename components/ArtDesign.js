@@ -59,6 +59,16 @@ export function ArtThumb({ art, size = "xs", title = "Arte criada" }) {
 // target: { entry_id } ou { card_id } do post ou peça (para editar páginas; só a equipe)
 export function ArtStrip({ art, feedback = false, onChange, target = null, theme = "" }) {
   const [editFor, setEditFor] = useState(null); // página aberta para editar
+
+  // exclui uma página (com confirmação): sai do post e da peça e o arquivo é apagado
+  async function removePage(i) {
+    const list = (override || art || []).filter((a) => a?.path);
+    if (!confirm(list.length > 1 ? `Excluir a página ${i + 1} da arte? Ela sai do post e da peça.` : "Excluir a arte? Ela sai do post e da peça.")) return;
+    const { ok, json } = await callArt({ action: "delete_page", run_id: list[i].run, ...(target || {}), page: i });
+    if (!ok) return alert(json.error || "Não consegui excluir a página.");
+    setOverride(json.art);
+    onChange?.(json.art);
+  }
   const [override, setOverride] = useState(null); // arte atualizada depois de refazer uma página
   useEffect(() => setOverride(null), [art]);
   const pages = (override || art || []).filter((a) => a?.path);
@@ -68,7 +78,7 @@ export function ArtStrip({ art, feedback = false, onChange, target = null, theme
     <>
       <div className="art-strip">
         {pages.map((a, i) => (
-          <ArtPage key={a.path} att={a} index={i} onOpen={() => setOpen(i)} onEdit={target ? () => setEditFor(i) : null} />
+          <ArtPage key={a.path} att={a} index={i} onOpen={() => setOpen(i)} onEdit={target ? () => setEditFor(i) : null} onDelete={target ? () => removePage(i) : null} />
         ))}
       </div>
       {editFor !== null && (
@@ -286,7 +296,7 @@ function ArtFeedback({ runId }) {
   );
 }
 
-function ArtPage({ att, index, onOpen, onEdit }) {
+function ArtPage({ att, index, onOpen, onEdit, onDelete }) {
   const url = useSignedUrl(att.path);
   return (
     <span className="art-page-wrap">
@@ -294,10 +304,19 @@ function ArtPage({ att, index, onOpen, onEdit }) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {url ? <img src={url} alt={att.name || "Arte página " + (index + 1)} /> : <span className="art-thumb-ph" />}
       </button>
-      {onEdit && (
-        <button type="button" className="art-page-edit" onClick={onEdit} title={`Editar a página ${index + 1}`} aria-label={`Editar a página ${index + 1}`}>
-          ✏️
-        </button>
+      {(onEdit || onDelete) && (
+        <span className="art-page-tools">
+          {onEdit && (
+            <button type="button" className="art-page-edit" onClick={onEdit} title={`Editar a página ${index + 1}`} aria-label={`Editar a página ${index + 1}`}>
+              ✏️
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" className="art-page-edit danger" onClick={onDelete} title={`Excluir a página ${index + 1}`} aria-label={`Excluir a página ${index + 1}`}>
+              🗑
+            </button>
+          )}
+        </span>
       )}
     </span>
   );
