@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { isoDate } from "../lib/holidays";
 import { defaultDueAt } from "../lib/brief";
 import { useCalendarEntries } from "../lib/useCalendarEntries";
@@ -16,6 +17,32 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
   const { entries, create, update, remove, removeMany, addLocal } = useCalendarEntries(client.id, first, last, showToast);
   const [aiOpen, setAiOpen] = useState(null); // null = fechado; senão, o modo inicial ("perfil", "historico"…)
   const [clearOpen, setClearOpen] = useState(false);
+  // demandas recorrentes do mês (só a equipe vê)
+  const [tasks, setTasks] = useState([]);
+  useEffect(() => {
+    if (readOnly) return;
+    let alive = true;
+    supabase
+      .from("cards")
+      .select("id, title, column_id, occurrence_date")
+      .eq("client_id", client.id)
+      .gte("occurrence_date", first)
+      .lte("occurrence_date", last)
+      .then(({ data }) => alive && setTasks(data || []));
+    return () => {
+      alive = false;
+    };
+  }, [client.id, first, last, readOnly]);
+
+  async function toggleTask(task, done) {
+    const column_id = done ? "concluidos" : "estruturacao";
+    setTasks((list) => list.map((t) => (t.id === task.id ? { ...t, column_id } : t)));
+    const { error } = await supabase.from("cards").update({ column_id }).eq("id", task.id);
+    if (error) {
+      setTasks((list) => list.map((t) => (t.id === task.id ? task : t)));
+      showToast("Não consegui marcar a demanda.");
+    }
+  }
 
   // arrastar um tema para outro dia; o prazo automático do design acompanha a data
   async function move(entry, day) {
@@ -34,6 +61,8 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
         year={year}
         month={month}
         entries={entries}
+        tasks={tasks}
+        onToggleTask={readOnly ? null : toggleTask}
         readOnly={readOnly}
         onPrev={onPrev}
         onNext={onNext}

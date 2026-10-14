@@ -14,6 +14,7 @@ import {
   weeklyTasks
 } from "../../../../lib/deadlines";
 import { sendEmail } from "../../../../lib/email";
+import { syncAllTemplates } from "../../../../lib/recurrenceSync";
 
 // Checagem diária de prazos (agendada no vercel.json, todo dia às 08:00 de Brasília).
 // Cria notificações no sistema e manda e-mail (se configurado) para:
@@ -35,6 +36,9 @@ export async function GET(request) {
 
   const today = todayInBrazil();
   const now = parse(today);
+
+  // demandas recorrentes: cria as próximas ocorrências antes de checar os prazos
+  const recurring = await syncAllTemplates(db, today);
 
   const [{ data: clients }, { data: profiles }, { data: done }, { data: cards }] = await Promise.all([
     db.from("clients").select("id, name, responsible_id"),
@@ -148,5 +152,5 @@ export async function GET(request) {
     }
   }
 
-  return Response.json({ today, checked: (clients || []).length, created, emailed });
+  return Response.json({ today, checked: (clients || []).length, created, emailed, recurring });
 }
