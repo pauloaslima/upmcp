@@ -28,11 +28,23 @@ test("estático vira uma página só; sem texto usa o tema", () => {
   assert.equal(splitPages({ format: "Estático", theme: "t", brief: { piece_text: piece } }).length, 1);
   assert.deepEqual(splitPages({ format: "Carrossel", theme: "Tema — x", brief: {} }), [{ texto: "Tema, x", pendente: false }]);
 });
-test("fotos: capa com a primeira, fechamento com a última, meio alternado", () => {
+test("fotos: mescla páginas com foto e páginas só com fundo e textura", () => {
   assert.deepEqual(assignPhotos(8, 0), Array(8).fill(-1));
   assert.deepEqual(assignPhotos(1, 3), [0]);
-  assert.deepEqual(assignPhotos(8, 4), [0, -1, 1, -1, 2, -1, 1, 3]);
   assert.deepEqual(assignPhotos(3, 1), [0, -1, 0]);
+  // 7 páginas e 2 fotos: só capa e fechamento
+  assert.deepEqual(assignPhotos(7, 2), [0, -1, -1, -1, -1, -1, 1]);
+  // 7 páginas e 4 fotos: uma página do meio com foto
+  assert.deepEqual(assignPhotos(7, 4), [0, -1, -1, 1, -1, -1, 3]);
+  // 8 páginas: no máximo 2 do meio, nunca vizinhas
+  const eight = assignPhotos(8, 5);
+  assert.equal(eight.filter((x) => x >= 0).length, 4);
+  for (let i = 1; i < 8; i++) assert.ok(!(eight[i] >= 0 && eight[i - 1] >= 0));
+});
+test("página sem foto pede só fundo, textura e tipografia", () => {
+  const prompt = buildSlidePrompt({ client: { name: "X" }, post: {}, page: { texto: "a" }, index: 2, total: 7, photoRole: "none", hasCoverRef: true, size: { width: 1080, height: 1350 } });
+  assert.match(prompt, /NO photograph/);
+  assert.match(prompt, /without its photo/);
 });
 test("pedido: texto exato, foto preservada, área livre para a marca e sem logo desenhada", () => {
   const prompt = buildSlidePrompt({
