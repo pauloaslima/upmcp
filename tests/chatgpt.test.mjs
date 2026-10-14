@@ -61,6 +61,7 @@ test("pedido: texto exato, foto preservada, área livre para a marca e sem logo 
   assert.match(prompt, /#F3EEE8, #5B4A66/);
   assert.match(prompt, /Do not draw any logo/);
   assert.match(prompt, /Avoid: faixas brancas/);
+  assert.match(prompt, /ONE single clean rectangle/);
   const middle = buildSlidePrompt({ client: { name: "X" }, post: {}, page: { texto: "a" }, index: 3, total: 8, photoRole: "none", hasCoverRef: true, size: { width: 1080, height: 1350 } });
   assert.match(middle, /Image 1 is slide 1/);
   assert.match(middle, /MIDDLE slide/);
