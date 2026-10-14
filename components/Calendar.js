@@ -10,7 +10,7 @@ import { asText, asTitle } from "../lib/text";
 import { lineStyle } from "../lib/editorial";
 import { supabase } from "../lib/supabaseClient";
 import { ArtDialog, ArtStrip, ArtThumb, canHaveArt } from "./ArtDesign";
-import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady } from "../lib/brief";
+import { BRIEF_STATUS, PLACEMENTS, PRIORITIES, REQUEST_TYPES, briefWithDefaults, designerPayload, missingForReady, pieceTextInfo } from "../lib/brief";
 
 export const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -785,13 +785,13 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                 </div>
 
                 <div>
-                  <label htmlFor="b-text">🎯 Título + texto da peça</label>
-                  <textarea
-                    id="b-text"
-                    rows={5}
-                    {...setB("piece_text")}
-                    placeholder={"Texto que vai na arte. Carrossel: separe por página.\nPágina 1: …\nPágina 2: …"}
-                  />
+                  <label htmlFor="b-text">{pieceTextInfo(values.format).label}</label>
+                  <textarea id="b-text" rows={6} {...setB("piece_text")} placeholder={pieceTextInfo(values.format).placeholder} />
+                </div>
+
+                <div>
+                  <label htmlFor="b-caption">✍️ Legenda / Copy</label>
+                  <textarea id="b-caption" rows={5} {...setB("caption")} placeholder="Legenda da postagem, com CTA e hashtags" />
                 </div>
 
                 {briefStatus === "enviado" ? (

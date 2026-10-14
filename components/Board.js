@@ -741,7 +741,7 @@ function ReviewModal({ card, onClose, onReview, showToast }) {
           )}
           {card.script && (
             <div>
-              <label>Roteiro</label>
+              <label>Texto da peça / roteiro</label>
               <div className="read-block">{card.script}</div>
             </div>
           )}
@@ -888,9 +888,13 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
         showToast(json.error || "Não consegui gerar o conteúdo agora.");
         return;
       }
-      if (!local.copy?.trim() && r.brief?.piece_text) {
-        setLocal((l) => ({ ...l, copy: r.brief.piece_text }));
-        onSave({ copy: r.brief.piece_text });
+      // só completa o que estiver vazio: roteiro / texto da peça e legenda
+      const fill = {};
+      if (!local.script?.trim() && r.brief?.piece_text) fill.script = r.brief.piece_text;
+      if (!local.copy?.trim() && r.brief?.caption) fill.copy = r.brief.caption;
+      if (Object.keys(fill).length) {
+        setLocal((l) => ({ ...l, ...fill }));
+        onSave(fill);
       }
       showToast("Conteúdo gerado. O briefing está nas observações da peça.");
     } catch (err) {
@@ -1131,8 +1135,8 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
           </div>
 
           <div>
-            <label>Roteiro (Reels / carrossel)</label>
-            <textarea {...field("script")} onBlur={() => commit("script")} placeholder="Roteiro cena a cena" />
+            <label>Texto da peça / roteiro</label>
+            <textarea {...field("script")} onBlur={() => commit("script")} placeholder="Carrossel e estático: texto das imagens (Página 1: …). Reels e vídeo: roteiro cena a cena" />
           </div>
 
           <div className="field-row">
