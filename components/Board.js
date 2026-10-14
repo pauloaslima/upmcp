@@ -1014,7 +1014,7 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
               <div className="section-label" style={{ marginBottom: 8 }}>
                 Arte
               </div>
-              <ArtStrip art={(local.attachments || []).filter((a) => a?.art)} feedback onChange={(next) => setLocal((l) => ({ ...l, attachments: [...next, ...(l.attachments || []).filter((a) => !a?.art)] }))} />
+              <ArtStrip art={(local.attachments || []).filter((a) => a?.art)} feedback target={{ card_id: card.id }} theme={local.title} onChange={(next) => setLocal((l) => ({ ...l, attachments: [...next, ...(l.attachments || []).filter((a) => !a?.art)] }))} />
             </div>
           )}
           {(local.requested_by || local.column_id === "backlog") && (

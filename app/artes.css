@@ -75,6 +75,12 @@
 .art-page.pickable { position: relative; cursor: pointer; }
 .art-page.pickable.on { border: 3px solid var(--gold); box-shadow: 0 0 0 2px rgba(201, 162, 39, 0.25); }
 .art-pick-num { position: absolute; left: 5px; top: 5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-.art-pick-check { position: absolute; right: 5px; top: 5px; width: 22px; height: 22px; border-radius: 50%; background: var(--gold); color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 .art-pick-busy { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.6); display: flex; align-items: center; justify-content: center; }
 .art-recreate { margin-right: auto; }
+
+/* caixinha de marcar na página e botão de editar sobre cada arte */
+.art-pick-box { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 6px; border: 2px solid #fff; background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+.art-pick-box.on { background: var(--gold); border-color: var(--gold); }
+.art-page-wrap { position: relative; flex: none; display: inline-flex; }
+.art-page-edit { position: absolute; right: 5px; top: 5px; width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.92); font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); padding: 0; }
+.art-page-edit:hover { background: #fff; transform: scale(1.08); }

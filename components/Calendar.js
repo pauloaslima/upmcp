@@ -632,7 +632,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
               {art.length > 0 && (
                 <div>
                   <label>Arte</label>
-                  <ArtStrip art={art} feedback onChange={setArt} />
+                  <ArtStrip art={art} feedback onChange={setArt} target={entry?.id ? { entry_id: entry.id } : null} theme={values.theme} />
                   <p className="hint">A arte também está anexada na peça da Linha de produção. Para mudar páginas, use ✏️ Editar arte.</p>
                 </div>
               )}

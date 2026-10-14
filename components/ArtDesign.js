@@ -56,7 +56,9 @@ export function ArtThumb({ art, size = "xs", title = "Arte criada" }) {
 // Todas as páginas, clicáveis (abrem a imagem em tamanho real).
 // feedback: mostra "Aprovar" e "Reprovar" (só a equipe), que ensinam as próximas artes do cliente
 // onChange(novaArte): quando uma página é refeita (para a tela de quem chamou atualizar)
-export function ArtStrip({ art, feedback = false, onChange }) {
+// target: { entry_id } ou { card_id } do post ou peça (para editar páginas; só a equipe)
+export function ArtStrip({ art, feedback = false, onChange, target = null, theme = "" }) {
+  const [editFor, setEditFor] = useState(null); // página aberta para editar
   const [override, setOverride] = useState(null); // arte atualizada depois de refazer uma página
   useEffect(() => setOverride(null), [art]);
   const pages = (override || art || []).filter((a) => a?.path);
@@ -66,15 +68,30 @@ export function ArtStrip({ art, feedback = false, onChange }) {
     <>
       <div className="art-strip">
         {pages.map((a, i) => (
-          <ArtPage key={a.path} att={a} index={i} onOpen={() => setOpen(i)} />
+          <ArtPage key={a.path} att={a} index={i} onOpen={() => setOpen(i)} onEdit={target ? () => setEditFor(i) : null} />
         ))}
       </div>
+      {editFor !== null && (
+        <ArtEditDialog
+          entry={{ theme }}
+          art={pages}
+          target={target}
+          preselect={[editFor]}
+          onCreated={(upd) => {
+            setOverride(upd.art);
+            onChange?.(upd.art);
+          }}
+          onClose={() => setEditFor(null)}
+          showToast={() => {}}
+        />
+      )}
       {feedback && pages[0].run && <ArtFeedback runId={pages[0].run} />}
       {open !== null && (
         <ArtViewer
           pages={pages}
           start={open}
-          canRedo={feedback && !!pages[0].run}
+          canRedo={feedback && (!!pages[0].run || !!target)}
+          target={target}
           onRedone={(next) => {
             setOverride(next);
             onChange?.(next);
@@ -87,7 +104,7 @@ export function ArtStrip({ art, feedback = false, onChange }) {
 }
 
 // Visualizador das páginas da arte na própria tela: setas na tela ou ← → do teclado, Esc fecha
-function ArtViewer({ pages, start, onClose, canRedo = false, onRedone }) {
+function ArtViewer({ pages, start, onClose, canRedo = false, onRedone, target = null }) {
   const [i, setI] = useState(start);
   const [redo, setRedo] = useState(null); // null | { text, busy, error }
   const total = pages.length;
@@ -101,13 +118,13 @@ function ArtViewer({ pages, start, onClose, canRedo = false, onRedone }) {
     const text = redo?.text?.trim();
     if (!text) return;
     setRedo({ text, busy: true });
-    const { ok, json } = await callArt({ action: "redo_page", run_id: pages[0].run, page: i, instrucao: text });
-    if (!ok || !json.run?.art?.length) {
+    const { ok, json } = await callArt({ action: "redo_page", run_id: pages[0].run, ...(target || {}), page: i, instrucao: text });
+    if (!ok || !json.art?.length) {
       setRedo({ text, error: json.error || "Não consegui refazer a página agora." });
       return;
     }
     setRedo(null);
-    onRedone?.(json.run.art);
+    onRedone?.(json.art);
   }
 
   useEffect(() => {
@@ -269,13 +286,20 @@ function ArtFeedback({ runId }) {
   );
 }
 
-function ArtPage({ att, index, onOpen }) {
+function ArtPage({ att, index, onOpen, onEdit }) {
   const url = useSignedUrl(att.path);
   return (
-    <button type="button" className="art-page" onClick={onOpen} title={"Ver " + (att.name || "a arte")}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {url ? <img src={url} alt={att.name || "Arte página " + (index + 1)} /> : <span className="art-thumb-ph" />}
-    </button>
+    <span className="art-page-wrap">
+      <button type="button" className="art-page" onClick={onOpen} title={"Ver " + (att.name || "a arte")}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {url ? <img src={url} alt={att.name || "Arte página " + (index + 1)} /> : <span className="art-thumb-ph" />}
+      </button>
+      {onEdit && (
+        <button type="button" className="art-page-edit" onClick={onEdit} title={`Editar a página ${index + 1}`} aria-label={`Editar a página ${index + 1}`}>
+          ✏️
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -285,7 +309,7 @@ export const canHaveArt = (entry) => ART_FORMATS.includes(entry?.format) && !!en
 export function ArtDialog({ client, entries, week = false, onCreated, onClose, showToast }) {
   const single = !week;
   const existing = single ? (entries[0].art || []).filter((a) => a?.path) : [];
-  const editable = existing.length > 0 && !!existing[0].run; // arte criada pelo ChatGPT: dá para editar páginas
+  const editable = existing.length > 0; // já existe arte: abre para editar páginas
   const [editMode, setEditMode] = useState(editable);
   const mode = "chatgpt";
   const [caps, setCaps] = useState(null); // o que está configurado no servidor: { geracao, banco }
@@ -357,6 +381,7 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
       <ArtEditDialog
         entry={entries[0]}
         art={existing}
+        target={entries[0].cardOnly ? { card_id: entries[0].id } : { entry_id: entries[0].id }}
         onCreated={onCreated}
         onClose={onClose}
         onRecreate={() => setEditMode(false)}
@@ -457,9 +482,9 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
 }
 
 // Editar arte: escolhe as páginas, escreve a alteração; cada página escolhida é refeita e substitui a antiga
-function ArtEditDialog({ entry, art, onCreated, onClose, onRecreate, showToast }) {
+function ArtEditDialog({ entry, art, target = null, preselect = [], onCreated, onClose, onRecreate, showToast }) {
   const [pages, setPages] = useState(art);
-  const [picked, setPicked] = useState(new Set());
+  const [picked, setPicked] = useState(new Set(preselect));
   const [text, setText] = useState("");
   const [progress, setProgress] = useState(null); // { atual, total, pagina }
   const [error, setError] = useState("");
@@ -480,12 +505,12 @@ function ArtEditDialog({ entry, art, onCreated, onClose, onRecreate, showToast }
     let ok = 0;
     for (let k = 0; k < list.length; k++) {
       setProgress({ atual: k + 1, total: list.length, pagina: list[k] + 1 });
-      const { ok: good, json } = await callArt({ action: "redo_page", run_id: current[0].run, page: list[k], instrucao: text.trim() });
-      if (!good || !json.run?.art?.length) {
+      const { ok: good, json } = await callArt({ action: "redo_page", run_id: current[0].run, ...(target || {}), page: list[k], instrucao: text.trim() });
+      if (!good || !json.art?.length) {
         setError(`Página ${list[k] + 1}: ${json.error || "não consegui refazer agora."}`);
         break;
       }
-      current = json.run.art;
+      current = json.art;
       setPages(current);
       onCreated?.({ ...entry, art: current });
       ok++;
@@ -551,10 +576,12 @@ function ArtEditDialog({ entry, art, onCreated, onClose, onRecreate, showToast }
             <span className="hint">
               <span className="spinner small" aria-hidden="true"></span> Refazendo a página {progress.pagina} ({progress.atual} de {progress.total}), cerca de 1 minuto cada. Não feche esta janela.
             </span>
-          ) : (
+          ) : onRecreate ? (
             <button type="button" className="mini-link art-recreate" onClick={onRecreate}>
               ou criar a arte toda de novo
             </button>
+          ) : (
+            <span className="art-recreate" />
           )}
           <button type="button" className="btn btn-plain" onClick={onClose} disabled={running}>
             Fechar
@@ -575,7 +602,7 @@ function ArtPickPage({ att, index, on, busy, onToggle }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {url ? <img src={url} alt={"Página " + (index + 1)} /> : <span className="art-thumb-ph" />}
       <span className="art-pick-num">{index + 1}</span>
-      {on && <span className="art-pick-check">✓</span>}
+      <span className={"art-pick-box" + (on ? " on" : "")} aria-hidden="true">{on ? "✓" : ""}</span>
       {busy && <span className="art-pick-busy"><span className="spinner small" aria-hidden="true"></span></span>}
     </button>
   );

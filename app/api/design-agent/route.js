@@ -1,7 +1,7 @@
 import { agentDb } from "../../../lib/agentApi";
 import { imageGenEnabled } from "../../../lib/openaiImages";
 import { stockEnabled } from "../../../lib/stockPhotos";
-import { ArtRunError, continueArtRun, redoChatGPTPage, runSummary, startArtRun, teamFeedback } from "../../../lib/art/pipeline";
+import { ArtRunError, continueArtRun, editArtPage, runSummary, startArtRun, teamFeedback } from "../../../lib/art/pipeline";
 
 // Produção de artes com direção de arte (Estático, Carrossel e Story). Só a equipe logada.
 // O trabalho é feito pelos agentes de lib/art (estrategista de briefing, diretor de arte, arquiteto de layout,
@@ -35,6 +35,12 @@ export async function POST(request) {
   // cliente "só administradores" (a própria agência) some para quem não é admin
   if (me.role !== "admin") {
     let clientId = body.client_id;
+    if (!clientId && (body.entry_id || body.card_id) && !body.run_id) {
+      const { data: row } = body.entry_id
+        ? await db.from("calendar_entries").select("client_id").eq("id", body.entry_id).maybeSingle()
+        : await db.from("cards").select("client_id").eq("id", body.card_id).maybeSingle();
+      clientId = row?.client_id;
+    }
     if (!clientId && body.run_id) {
       const { data: run } = await db.from("art_runs").select("client_id").eq("id", body.run_id).maybeSingle();
       clientId = run?.client_id;
@@ -46,8 +52,8 @@ export async function POST(request) {
     if (body.action === "feedback") return Response.json(await teamFeedback(db, body.run_id, { aprovado: !!body.aprovado, motivo: body.motivo }));
     // refazer uma página: { action: "redo_page", run_id, page (0 = primeira), instrucao }
     if (body.action === "redo_page") {
-      const run = await redoChatGPTPage(db, body.run_id, body.page, body.instrucao);
-      return Response.json({ ok: true, run: await runSummary(db, run) });
+      const out = await editArtPage(db, { run_id: body.run_id, entry_id: body.entry_id, card_id: body.card_id, page: body.page, instrucao: body.instrucao });
+      return Response.json({ ok: true, art: out.run ? (await runSummary(db, out.run)).art : out.art });
     }
     const run =
       body.action === "continue"
