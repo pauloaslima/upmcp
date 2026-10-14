@@ -31,6 +31,16 @@ export async function POST(request) {
 
   const body = await request.json().catch(() => ({}));
   const budget = () => BUDGET_MS - (Date.now() - startedAt);
+  // cliente "só administradores" (a própria agência) some para quem não é admin
+  if (me.role !== "admin") {
+    let clientId = body.client_id;
+    if (!clientId && body.run_id) {
+      const { data: run } = await db.from("art_runs").select("client_id").eq("id", body.run_id).maybeSingle();
+      clientId = run?.client_id;
+    }
+    const { data: c } = clientId ? await db.from("clients").select("admin_only").eq("id", clientId).maybeSingle() : { data: null };
+    if (c?.admin_only) return Response.json({ error: "Cliente não encontrado." }, { status: 404 });
+  }
   try {
     if (body.action === "feedback") return Response.json(await teamFeedback(db, body.run_id, { aprovado: !!body.aprovado, motivo: body.motivo }));
     const run =

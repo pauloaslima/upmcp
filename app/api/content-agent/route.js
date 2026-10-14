@@ -35,7 +35,7 @@ export async function POST(request) {
 
   const body = await request.json().catch(() => ({}));
   const { data: client } = body.client_id ? await db.from("clients").select("*").eq("id", body.client_id).maybeSingle() : { data: null };
-  if (!client) return Response.json({ error: "Cliente não encontrado." }, { status: 404 });
+  if (!client || (client.admin_only && me.role !== "admin")) return Response.json({ error: "Cliente não encontrado." }, { status: 404 });
 
   try {
     if (body.mode === "month") return await runMonth(db, client, body);

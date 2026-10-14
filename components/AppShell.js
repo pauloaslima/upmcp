@@ -330,7 +330,7 @@ export default function AppShell({ session, profile }) {
                             <div key={c.id}>
                               <button className={"side-item" + (view.clientId === c.id && view.page === "cliente" ? " active" : "")} onClick={() => openClient(c.id)}>
                                 <span className="side-initial">{c.name.charAt(0).toUpperCase()}</span>
-                                <span className="side-name">{c.name}</span>
+                                <span className="side-name">{c.name}{c.admin_only && <span className="admin-only-tag" title="Interno: só administradores veem"> 🔒</span>}</span>
                               </button>
                               {view.page === "cliente" && view.clientId === c.id && (
                                 <div className="side-sub">
@@ -448,7 +448,7 @@ export default function AppShell({ session, profile }) {
                       {clients.filter(isMine).map((c) => (
                         <button key={c.id} className="client-tile mine" onClick={() => openClient(c.id)}>
                           <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
-                          <span className="client-tile-name">{c.name}</span>
+                          <span className="client-tile-name">{c.name}{c.admin_only && <span className="admin-only-tag" title="Interno: só administradores veem"> 🔒</span>}</span>
                         </button>
                       ))}
                     </div>
@@ -476,7 +476,7 @@ export default function AppShell({ session, profile }) {
                       .map((c) => (
                         <button key={c.id} className="client-tile" onClick={() => openClient(c.id)}>
                           <span className="client-tile-initial">{c.name.charAt(0).toUpperCase()}</span>
-                          <span className="client-tile-name">{c.name}</span>
+                          <span className="client-tile-name">{c.name}{c.admin_only && <span className="admin-only-tag" title="Interno: só administradores veem"> 🔒</span>}</span>
                         </button>
                       ))}
                   </div>
