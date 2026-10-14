@@ -7,7 +7,6 @@ import { cardDue, iso, mondayOf, parse, shortDate, weeklyTasks } from "../lib/de
 import { openAttachment, removeFile, uploadFile } from "../lib/files";
 import { shortName } from "../lib/people";
 import { ArtDialog, ArtStrip, ArtThumb } from "./ArtDesign";
-import { WEEKDAY_NAMES, describeRecurrence } from "../lib/recurrence";
 
 export function initials(person) {
   const name = (person?.full_name || person?.email || "?").trim();
@@ -543,8 +542,6 @@ function CardTile({ card, isStaff, people = {}, assignee, onOpen, dragCardId }) 
       </div>
       <div className="card-tags">
         {card.format && <span className="tag tag-format">{card.format}</span>}
-        {isStaff && card.recurrence && <span className="tag tag-recurring" title="Demanda recorrente">🔁 {describeRecurrence(card.recurrence)}</span>}
-        {isStaff && card.recurrence_parent && card.occurrence_date && <span className="tag tag-recurring" title="Ocorrência de uma demanda recorrente">🔁 {shortDate(card.occurrence_date)}</span>}
         {isStaff && card.sensitive && <span className="tag tag-sensitive">sensível</span>}
         {isStaff && card.requested_by && (
           <span className="tag tag-request">{people[card.requested_by] ? "demanda de " + shortName(people[card.requested_by]) : "pedido do cliente"}</span>
@@ -852,116 +849,6 @@ function ReceivePanel({ card, team, me, isAdmin, onReceived, showToast }) {
   );
 }
 
-// Demanda recorrente: "🔁 Repetir esta demanda" cria as próximas ocorrências (cards com prazo) no calendário e em Tarefas
-function RecurrenceBox({ card, onSaved, showToast }) {
-  const [rule, setRule] = useState(card.recurrence || null);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => setRule(card.recurrence || null), [card.recurrence]);
-  const changed = JSON.stringify(rule || null) !== JSON.stringify(card.recurrence || null);
-
-  async function save(next) {
-    setSaving(true);
-    try {
-      const { data } = await supabase.auth.getSession();
-      const res = await fetch("/api/recurrence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session?.access_token || "") },
-        body: JSON.stringify({ card_id: card.id, recurrence: next })
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        showToast(json.error || "Não consegui salvar a repetição.");
-        return;
-      }
-      onSaved(json.recurrence);
-      showToast(
-        json.recurrence
-          ? `Repetição salva: ${describeRecurrence(json.recurrence)}. ${json.created} próxima(s) ocorrência(s) criada(s) no calendário.`
-          : `Repetição desligada. ${json.removed} ocorrência(s) futura(s) removida(s).`
-      );
-    } catch (err) {
-      console.error(err);
-      showToast("Não consegui falar com o servidor.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const tipo = rule?.tipo || "";
-  return (
-    <div className="recurrence-box">
-      <label className="sensitive-toggle">
-        <input
-          type="checkbox"
-          checked={!!rule}
-          disabled={saving}
-          onChange={(e) => {
-            if (e.target.checked) setRule({ tipo: "mensal", dia: Number((card.due_date || "").slice(8, 10)) || new Date().getDate() });
-            else {
-              setRule(null);
-              if (card.recurrence) save(null);
-            }
-          }}
-        />
-        <span>
-          <strong>🔁 Repetir esta demanda</strong> | cria um card com prazo em cada data, no calendário do cliente e em Tarefas, com aviso no dia
-        </span>
-      </label>
-      {rule && (
-        <div className="recurrence-rule">
-          <select value={tipo} onChange={(e) => setRule(e.target.value === "mensal" ? { tipo: "mensal", dia: rule.dia || 1 } : e.target.value === "semanal" ? { tipo: "semanal", dias: rule.dias || [1] } : { tipo: "diaria" })} disabled={saving}>
-            <option value="mensal">Todo mês</option>
-            <option value="semanal">Toda semana</option>
-            <option value="diaria">Todo dia útil</option>
-          </select>
-          {tipo === "mensal" && (
-            <label className="recurrence-day">
-              no dia
-              <input type="number" min={1} max={31} value={rule.dia || ""} onChange={(e) => setRule({ tipo: "mensal", dia: Number(e.target.value) || "" })} disabled={saving} />
-            </label>
-          )}
-          {tipo === "semanal" && (
-            <span className="recurrence-days">
-              {WEEKDAY_NAMES.map((n, d) => (
-                <label key={d} className={"day-pill" + ((rule.dias || []).includes(d) ? " on" : "")}>
-                  <input
-                    type="checkbox"
-                    checked={(rule.dias || []).includes(d)}
-                    onChange={() => setRule({ tipo: "semanal", dias: (rule.dias || []).includes(d) ? rule.dias.filter((x) => x !== d) : [...(rule.dias || []), d] })}
-                    disabled={saving}
-                  />
-                  {n.slice(0, 3)}
-                </label>
-              ))}
-            </span>
-          )}
-          {changed && (
-            <button type="button" className="btn btn-gold btn-sm" onClick={() => save(rule)} disabled={saving}>
-              {saving ? "Salvando…" : "Salvar repetição"}
-            </button>
-          )}
-          {!changed && card.recurrence && <span className="hint">Ativa: {describeRecurrence(card.recurrence)}. As ocorrências são criadas com até 45 dias de antecedência.</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Ocorrência de uma demanda recorrente: "Feito" leva para Concluídos
-function OccurrenceBox({ card, onDone }) {
-  const done = card.column_id === "concluidos";
-  return (
-    <div className="recurrence-box">
-      <label className="sensitive-toggle">
-        <input type="checkbox" checked={done} onChange={(e) => onDone(e.target.checked)} />
-        <span>
-          <strong>✓ Feito</strong> | ocorrência de {shortDate(card.occurrence_date)} de uma demanda recorrente (a repetição se ajusta no card original)
-        </span>
-      </label>
-    </div>
-  );
-}
-
 function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showToast, team, me, isAdmin }) {
   const [local, setLocal] = useState(card);
   const fileInputRef = useRef(null);
@@ -1127,7 +1014,7 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
               <div className="section-label" style={{ marginBottom: 8 }}>
                 Arte
               </div>
-              <ArtStrip art={(local.attachments || []).filter((a) => a?.art)} feedback />
+              <ArtStrip art={(local.attachments || []).filter((a) => a?.art)} feedback onChange={(next) => setLocal((l) => ({ ...l, attachments: [...next, ...(l.attachments || []).filter((a) => !a?.art)] }))} />
             </div>
           )}
           {(local.requested_by || local.column_id === "backlog") && (
@@ -1187,16 +1074,6 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
               )}
             </div>
           </div>
-
-          {local.recurrence_parent ? (
-            <OccurrenceBox card={local} onDone={(done) => {
-              const column_id = done ? "concluidos" : "estruturacao";
-              setLocal((l) => ({ ...l, column_id }));
-              onSave({ column_id });
-            }} />
-          ) : (
-            <RecurrenceBox card={local} showToast={showToast} onSaved={(recurrence) => setLocal((l) => ({ ...l, recurrence }))} />
-          )}
 
           <div className="field-row">
             <div>

@@ -86,7 +86,7 @@ export function EntryChip({ entry, onClick, dragProps, forClient = false }) {
 
 // onMove(entry, novoDia): arrastar um tema para outro dia. onAi: abre o "Criar calendário".
 // onClear: abre o "Limpar mês".
-export default function Calendar({ year, month, entries, tasks = [], onToggleTask, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi, onClear }) {
+export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi, onClear }) {
   const [editing, setEditing] = useState(null); // { day } para novo, { entry } para existente
   const [dragging, setDragging] = useState(null); // tema sendo arrastado
   const [dropDay, setDropDay] = useState(null);
@@ -107,13 +107,6 @@ export default function Calendar({ year, month, entries, tasks = [], onToggleTas
     );
     return map;
   }, [entries]);
-
-  // demandas recorrentes do dia (ocorrências)
-  const tasksByDay = useMemo(() => {
-    const map = {};
-    tasks.forEach((t) => (map[t.occurrence_date] = map[t.occurrence_date] || []).push(t));
-    return map;
-  }, [tasks]);
 
   const campaigns = MONTH_CAMPAIGNS[month] || [];
 
@@ -220,12 +213,6 @@ export default function Calendar({ year, month, entries, tasks = [], onToggleTas
                 )}
               </div>
               <SpecialDates list={specials} />
-              {(tasksByDay[key] || []).map((t) => (
-                <label key={t.id} className={"cal-task" + (t.column_id === "concluidos" ? " done" : "")} title="Demanda recorrente">
-                  <input type="checkbox" checked={t.column_id === "concluidos"} onChange={(e) => onToggleTask?.(t, e.target.checked)} disabled={!onToggleTask} />
-                  <span>🔁 {t.title}</span>
-                </label>
-              ))}
               {list.map((entry) => (
                 <EntryChip
                   key={entry.id}
@@ -645,7 +632,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
               {art.length > 0 && (
                 <div>
                   <label>Arte</label>
-                  <ArtStrip art={art} feedback />
+                  <ArtStrip art={art} feedback onChange={setArt} />
                   <p className="hint">A arte também está anexada na peça da Linha de produção. Para refazer, use 🎨 Criar arte.</p>
                 </div>
               )}

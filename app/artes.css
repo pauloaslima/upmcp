@@ -65,18 +65,6 @@
 .art-viewer-dots button { width: 9px; height: 9px; border-radius: 50%; border: none; padding: 0; background: rgba(255, 255, 255, 0.4); cursor: pointer; }
 .art-viewer-dots button.on { background: #fff; width: 22px; border-radius: 5px; }
 @media (max-width: 640px) { .art-viewer { padding: 56px 12px 48px; } .art-viewer-nav { width: 40px; height: 40px; } .art-viewer-nav.prev { left: 6px; } .art-viewer-nav.next { right: 6px; } }
-
-/* demandas recorrentes */
-.recurrence-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; }
-.recurrence-rule { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.recurrence-rule select { width: auto; }
-.recurrence-day { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 400; }
-.recurrence-day input { width: 64px; }
-.recurrence-days { display: flex; gap: 4px; flex-wrap: wrap; }
-.day-pill { display: inline-flex; align-items: center; gap: 0; margin: 0; padding: 4px 9px; border: 1px solid var(--border); border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; text-transform: capitalize; }
-.day-pill input { display: none; }
-.day-pill.on { background: var(--gold); border-color: var(--gold); color: #fff; }
-.tag-recurring { background: rgba(122, 92, 200, 0.12); color: #5b46a0; }
-.cal-task { display: flex; align-items: flex-start; gap: 5px; margin: 2px 0; padding: 3px 6px; border-radius: 6px; background: rgba(122, 92, 200, 0.1); font-size: 12px; font-weight: 500; line-height: 1.25; cursor: pointer; }
-.cal-task input { margin: 1px 0 0; width: 13px; height: 13px; flex: none; }
-.cal-task.done span { text-decoration: line-through; opacity: 0.6; }
+.art-redo { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); background: var(--surface); border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; gap: 8px; z-index: 2; }
+.art-redo label { margin: 0; }
+.art-redo-actions { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }

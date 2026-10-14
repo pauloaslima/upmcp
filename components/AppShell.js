@@ -282,7 +282,7 @@ export default function AppShell({ session, profile }) {
                   <span className="side-icon">☑</span> Tarefas
                 </button>
                 <button className={"side-item" + (view.page === "rotina" ? " active" : "")} onClick={() => go({ page: "rotina" })}>
-                  <span className="side-icon">⟳</span> Rotina diária
+                  <span className="side-icon">⟳</span> Rotinas
                 </button>
                 {isAdmin && (
                   <button className={"side-item" + (view.page === "atribuicoes" ? " active" : "")} onClick={() => go({ page: "atribuicoes" })}>
@@ -421,7 +421,7 @@ export default function AppShell({ session, profile }) {
           {view.page === "rotina" && isStaff && (
             <>
               <div className="page-head">
-                <h2 className="page-title">Rotina diária</h2>
+                <h2 className="page-title">Rotinas</h2>
               </div>
               <div className="page-scroll">
                 <RoutinesPage me={session.user} isAdmin={isAdmin} clients={clients} team={team} showToast={showToast} />

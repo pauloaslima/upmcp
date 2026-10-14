@@ -55,8 +55,11 @@ export function ArtThumb({ art, size = "xs", title = "Arte criada" }) {
 
 // Todas as páginas, clicáveis (abrem a imagem em tamanho real).
 // feedback: mostra "Aprovar" e "Reprovar" (só a equipe), que ensinam as próximas artes do cliente
-export function ArtStrip({ art, feedback = false }) {
-  const pages = (art || []).filter((a) => a?.path);
+// onChange(novaArte): quando uma página é refeita (para a tela de quem chamou atualizar)
+export function ArtStrip({ art, feedback = false, onChange }) {
+  const [override, setOverride] = useState(null); // arte atualizada depois de refazer uma página
+  useEffect(() => setOverride(null), [art]);
+  const pages = (override || art || []).filter((a) => a?.path);
   const [open, setOpen] = useState(null); // página aberta no visualizador
   if (!pages.length) return null;
   return (
@@ -67,18 +70,56 @@ export function ArtStrip({ art, feedback = false }) {
         ))}
       </div>
       {feedback && pages[0].run && <ArtFeedback runId={pages[0].run} />}
-      {open !== null && <ArtViewer pages={pages} start={open} onClose={() => setOpen(null)} />}
+      {open !== null && (
+        <ArtViewer
+          pages={pages}
+          start={open}
+          canRedo={feedback && !!pages[0].run}
+          onRedone={(next) => {
+            setOverride(next);
+            onChange?.(next);
+          }}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </>
   );
 }
 
 // Visualizador das páginas da arte na própria tela: setas na tela ou ← → do teclado, Esc fecha
-function ArtViewer({ pages, start, onClose }) {
+function ArtViewer({ pages, start, onClose, canRedo = false, onRedone }) {
   const [i, setI] = useState(start);
+  const [redo, setRedo] = useState(null); // null | { text, busy, error }
   const total = pages.length;
-  const go = (d) => setI((x) => (x + d + total) % total);
+  const go = (d) => {
+    setRedo(null);
+    setI((x) => (x + d + total) % total);
+  };
+
+  // refaz só esta página com a alteração escrita
+  async function sendRedo() {
+    const text = redo?.text?.trim();
+    if (!text) return;
+    setRedo({ text, busy: true });
+    const { ok, json } = await callArt({ action: "redo_page", run_id: pages[0].run, page: i, instrucao: text });
+    if (!ok || !json.run?.art?.length) {
+      setRedo({ text, error: json.error || "Não consegui refazer a página agora." });
+      return;
+    }
+    setRedo(null);
+    onRedone?.(json.run.art);
+  }
+
   useEffect(() => {
     const onKey = (e) => {
+      // escrevendo a alteração: as setas e o Esc são do campo de texto
+      if (["INPUT", "TEXTAREA"].includes(e.target?.tagName) && e.key !== "Escape") return;
+      if (e.key === "Escape" && redo) {
+        setRedo(null);
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
       if (e.key === "ArrowRight") go(1);
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "Escape") onClose();
@@ -90,7 +131,7 @@ function ArtViewer({ pages, start, onClose }) {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [total, onClose]);
+  }, [total, onClose, redo]);
   const url = useSignedUrl(pages[i].path);
   // já busca as páginas vizinhas para a troca ser instantânea
   useSignedUrl(pages[(i + 1) % total].path);
@@ -109,6 +150,11 @@ function ArtViewer({ pages, start, onClose }) {
       <div className="art-viewer-top">
         <span>{total > 1 ? `${i + 1} de ${total}` : "Arte"}</span>
         <div className="art-viewer-actions">
+          {canRedo && !redo && (
+            <button type="button" className="btn btn-plain btn-sm" onClick={() => setRedo({ text: "" })}>
+              ✏️ Refazer esta página
+            </button>
+          )}
           {url && (
             <a className="btn btn-plain btn-sm" href={url} download={pages[i].name || `arte-${i + 1}.png`} target="_blank" rel="noopener noreferrer">
               ⬇ Baixar
@@ -131,7 +177,38 @@ function ArtViewer({ pages, start, onClose }) {
           ›
         </button>
       )}
-      {total > 1 && (
+      {redo && (
+        <div className="art-redo" onClick={(e) => e.stopPropagation()}>
+          <label htmlFor="art-redo-text">O que mudar na página {i + 1}?</label>
+          <textarea
+            id="art-redo-text"
+            rows={3}
+            autoFocus
+            value={redo.text}
+            disabled={redo.busy}
+            onChange={(e) => setRedo({ text: e.target.value })}
+            placeholder="Ex.: aumentar a foto, trocar o fundo para lilás, deixar o título em uma linha, corrigir o acento de 'você'"
+          />
+          {redo.error && <div className="hint warn">{redo.error}</div>}
+          <div className="art-redo-actions">
+            {redo.busy ? (
+              <span className="hint">
+                <span className="spinner small" aria-hidden="true"></span> Refazendo a página {i + 1} (cerca de 1 minuto). As outras páginas não mudam.
+              </span>
+            ) : (
+              <>
+                <button type="button" className="btn btn-plain btn-sm" onClick={() => setRedo(null)}>
+                  Cancelar
+                </button>
+                <button type="button" className="btn btn-gold btn-sm" onClick={sendRedo} disabled={!redo.text?.trim()}>
+                  Refazer página {i + 1}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {total > 1 && !redo && (
         <div className="art-viewer-dots">
           {pages.map((pg, k) => (
             <button key={pg.path} type="button" className={k === i ? "on" : ""} onClick={() => setI(k)} aria-label={`Página ${k + 1}`} />

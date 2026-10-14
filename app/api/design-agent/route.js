@@ -1,7 +1,7 @@
 import { agentDb } from "../../../lib/agentApi";
 import { imageGenEnabled } from "../../../lib/openaiImages";
 import { stockEnabled } from "../../../lib/stockPhotos";
-import { ArtRunError, continueArtRun, runSummary, startArtRun, teamFeedback } from "../../../lib/art/pipeline";
+import { ArtRunError, continueArtRun, redoChatGPTPage, runSummary, startArtRun, teamFeedback } from "../../../lib/art/pipeline";
 
 // Produção de artes com direção de arte (Estático, Carrossel e Story). Só a equipe logada.
 // O trabalho é feito pelos agentes de lib/art (estrategista de briefing, diretor de arte, arquiteto de layout,
@@ -9,6 +9,7 @@ import { ArtRunError, continueArtRun, runSummary, startArtRun, teamFeedback } fr
 //   POST { action: "start", client_id, entry_id | card_id, mode: "material" | "ia" | "gerar", guidance, enhance }
 //   POST { action: "continue", run_id }   avança a rodada (a tela repete até "final": true)
 //   POST { action: "feedback", run_id, aprovado: true|false, motivo }   decisão da equipe (aprendizado)
+//   POST { action: "redo_page", run_id, page, instrucao }   refaz só uma página com a alteração pedida
 // GET devolve o que está configurado: { geracao, banco }
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,11 @@ export async function POST(request) {
   }
   try {
     if (body.action === "feedback") return Response.json(await teamFeedback(db, body.run_id, { aprovado: !!body.aprovado, motivo: body.motivo }));
+    // refazer uma página: { action: "redo_page", run_id, page (0 = primeira), instrucao }
+    if (body.action === "redo_page") {
+      const run = await redoChatGPTPage(db, body.run_id, body.page, body.instrucao);
+      return Response.json({ ok: true, run: await runSummary(db, run) });
+    }
     const run =
       body.action === "continue"
         ? await continueArtRun(db, body.run_id, budget())

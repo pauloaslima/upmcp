@@ -71,7 +71,7 @@ export function ClientTeam({ client, team, isAdmin, showToast, onMembersChange }
             const fns = [
               m.user_id === client.responsible_id && "Responsável pelo cliente",
               m.role_label,
-              ...routines.filter((r) => r.user_id === m.user_id).map((r) => r.title + " (rotina diária)")
+              ...routines.filter((r) => r.user_id === m.user_id).map((r) => r.title + " (rotina)")
             ].filter(Boolean);
             return (
               <div key={m.user_id} className="member-row">
