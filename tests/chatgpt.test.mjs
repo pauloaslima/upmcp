@@ -11,9 +11,22 @@ test("divide o texto da peça por página", () => {
   assert.match(pages[0].texto, /^SUPERDOTAÇÃO/);
   assert.match(pages[2].texto, /Teste online/);
 });
+test("páginas separadas por barra na mesma linha e pendências fora da arte", () => {
+  const one = "Página 1: ALTAS HABILIDADES: 5 mitos. Subtítulo: Salve esse post. / Página 2: Mito 1: Toda criança tira notas altas. Verdade: muitas se entediam. / Página 3: Entender o seu filho. Me chame no [confirmar com o cliente: direct ou WhatsApp].";
+  const pages = splitPages({ format: "Carrossel", theme: "t", brief: { piece_text: one } });
+  assert.equal(pages.length, 3);
+  assert.match(pages[1].texto, /^Mito 1:/);
+  assert.equal(pages[2].texto, "Entender o seu filho. Me chame no.");
+  assert.equal(pages[2].pendente, true);
+  assert.equal(pages[0].pendente, false);
+});
+test("carrossel sem marcação vira pelo menos 3 páginas", () => {
+  const pages = splitPages({ format: "Carrossel", theme: "t", brief: { piece_text: "Frase um. Frase dois. Frase três. Frase quatro." } });
+  assert.ok(pages.length >= 3);
+});
 test("estático vira uma página só; sem texto usa o tema", () => {
   assert.equal(splitPages({ format: "Estático", theme: "t", brief: { piece_text: piece } }).length, 1);
-  assert.deepEqual(splitPages({ format: "Carrossel", theme: "Tema — x", brief: {} }), [{ texto: "Tema, x" }]);
+  assert.deepEqual(splitPages({ format: "Carrossel", theme: "Tema — x", brief: {} }), [{ texto: "Tema, x", pendente: false }]);
 });
 test("fotos: capa com a primeira, fechamento com a última, meio alternado", () => {
   assert.deepEqual(assignPhotos(8, 0), Array(8).fill(-1));
