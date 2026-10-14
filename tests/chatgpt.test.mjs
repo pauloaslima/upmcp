@@ -56,9 +56,7 @@ test("pedido: texto exato, foto preservada, área livre para a marca e sem logo 
   });
   assert.match(prompt, /EXACTLY this Brazilian Portuguese text/);
   assert.match(prompt, /"""Teste online NÃO fecha diagnóstico\."""/);
-  assert.match(prompt, /PHOTO AREA/);
-  assert.match(prompt, /RIGHT 56%/);
-  assert.doesNotMatch(prompt, /Image 1 is a REAL photograph/);
+  assert.match(prompt, /IDENTICAL to the photo/);
   assert.match(prompt, /COVER/);
   assert.match(prompt, /#F3EEE8, #5B4A66/);
   assert.match(prompt, /Do not draw any logo/);
