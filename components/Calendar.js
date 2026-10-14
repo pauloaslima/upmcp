@@ -535,7 +535,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                 disabled={!canHaveArt({ format: values.format, theme: values.theme })}
                 title={canHaveArt({ format: values.format, theme: values.theme }) ? "Criar a arte com o material do post e da peça" : "A arte automática é para Estático, Carrossel e Story com tema"}
               >
-                🎨 Criar arte
+                {art.length ? "✏️ Editar arte" : "🎨 Criar arte"}
               </button>
               <span className="hint">A arte usa o que já está salvo no post e na peça.</span>
             </div>
@@ -633,7 +633,7 @@ export function EntryEditor({ day, entry, specials, client, showToast, onClose, 
                 <div>
                   <label>Arte</label>
                   <ArtStrip art={art} feedback onChange={setArt} />
-                  <p className="hint">A arte também está anexada na peça da Linha de produção. Para refazer, use 🎨 Criar arte.</p>
+                  <p className="hint">A arte também está anexada na peça da Linha de produção. Para mudar páginas, use ✏️ Editar arte.</p>
                 </div>
               )}
               <div>

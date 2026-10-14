@@ -284,6 +284,9 @@ export const canHaveArt = (entry) => ART_FORMATS.includes(entry?.format) && !!en
 // entries: posts que podem ganhar arte; week = janela "Criar artes da semana" (senão, a arte de um post)
 export function ArtDialog({ client, entries, week = false, onCreated, onClose, showToast }) {
   const single = !week;
+  const existing = single ? (entries[0].art || []).filter((a) => a?.path) : [];
+  const editable = existing.length > 0 && !!existing[0].run; // arte criada pelo ChatGPT: dá para editar páginas
+  const [editMode, setEditMode] = useState(editable);
   const mode = "chatgpt";
   const [caps, setCaps] = useState(null); // o que está configurado no servidor: { geracao, banco }
   useEffect(() => {
@@ -348,6 +351,18 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+
+  if (editMode)
+    return (
+      <ArtEditDialog
+        entry={entries[0]}
+        art={existing}
+        onCreated={onCreated}
+        onClose={onClose}
+        onRecreate={() => setEditMode(false)}
+        showToast={showToast}
+      />
+    );
 
   return (
     <div
@@ -438,6 +453,131 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
         </div>
       </div>
     </div>
+  );
+}
+
+// Editar arte: escolhe as páginas, escreve a alteração; cada página escolhida é refeita e substitui a antiga
+function ArtEditDialog({ entry, art, onCreated, onClose, onRecreate, showToast }) {
+  const [pages, setPages] = useState(art);
+  const [picked, setPicked] = useState(new Set());
+  const [text, setText] = useState("");
+  const [progress, setProgress] = useState(null); // { atual, total, pagina }
+  const [error, setError] = useState("");
+  const running = !!progress;
+  const toggle = (i) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  const all = picked.size === pages.length;
+
+  async function run() {
+    const list = [...picked].sort((a, b) => a - b);
+    if (!list.length || !text.trim()) return;
+    setError("");
+    let current = pages;
+    let ok = 0;
+    for (let k = 0; k < list.length; k++) {
+      setProgress({ atual: k + 1, total: list.length, pagina: list[k] + 1 });
+      const { ok: good, json } = await callArt({ action: "redo_page", run_id: current[0].run, page: list[k], instrucao: text.trim() });
+      if (!good || !json.run?.art?.length) {
+        setError(`Página ${list[k] + 1}: ${json.error || "não consegui refazer agora."}`);
+        break;
+      }
+      current = json.run.art;
+      setPages(current);
+      onCreated?.({ ...entry, art: current });
+      ok++;
+    }
+    setProgress(null);
+    if (ok) {
+      setPicked(new Set());
+      showToast(ok === 1 ? "Página refeita e substituída." : `${ok} páginas refeitas e substituídas.`);
+    }
+  }
+
+  return (
+    <div
+      className="overlay art-overlay"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.target.classList.contains("art-overlay") && !running) onClose();
+      }}
+    >
+      <div className="modal modal-md art-dialog" role="dialog" aria-label="Editar arte">
+        <div className="modal-head">
+          <div style={{ flex: 1 }}>
+            <h3>Editar arte</h3>
+            <div className="entry-date">{entry.theme}</div>
+          </div>
+          <button type="button" className="icon-btn" title="Fechar" onClick={onClose} disabled={running}>
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div>
+            <div className="art-pick-head">
+              <label>Escolha as páginas que vão mudar</label>
+              <button type="button" className="mini-link" onClick={() => setPicked(all ? new Set() : new Set(pages.map((_, i) => i)))} disabled={running}>
+                {all ? "Desmarcar todas" : "Selecionar todas"}
+              </button>
+            </div>
+            <div className="art-strip art-pick">
+              {pages.map((a, i) => (
+                <ArtPickPage key={a.path} att={a} index={i} on={picked.has(i)} busy={progress?.pagina === i + 1} onToggle={() => !running && toggle(i)} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="art-edit-text">O que mudar {picked.size > 1 ? `nas ${picked.size} páginas` : picked.size === 1 ? `na página ${[...picked][0] + 1}` : "nas páginas escolhidas"}</label>
+            <textarea
+              id="art-edit-text"
+              rows={3}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              disabled={running}
+              placeholder="Ex.: aumentar a foto, trocar o fundo para dourado, deixar o título em uma linha, corrigir o acento de 'você'"
+            />
+            <p className="hint">Só as páginas marcadas são refeitas; cada uma entra no lugar da antiga, que é apagada. As outras não mudam.</p>
+          </div>
+          {error && <div className="hint warn">{error}</div>}
+        </div>
+
+        <div className="modal-foot">
+          {running ? (
+            <span className="hint">
+              <span className="spinner small" aria-hidden="true"></span> Refazendo a página {progress.pagina} ({progress.atual} de {progress.total}), cerca de 1 minuto cada. Não feche esta janela.
+            </span>
+          ) : (
+            <button type="button" className="mini-link art-recreate" onClick={onRecreate}>
+              ou criar a arte toda de novo
+            </button>
+          )}
+          <button type="button" className="btn btn-plain" onClick={onClose} disabled={running}>
+            Fechar
+          </button>
+          <button type="button" className="btn btn-gold" onClick={run} disabled={running || !picked.size || !text.trim()}>
+            ✏️ Editar {picked.size || ""} {picked.size === 1 ? "página" : "páginas"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArtPickPage({ att, index, on, busy, onToggle }) {
+  const url = useSignedUrl(att.path);
+  return (
+    <button type="button" className={"art-page pickable" + (on ? " on" : "")} onClick={onToggle} title={`Página ${index + 1}`} aria-pressed={on}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url ? <img src={url} alt={"Página " + (index + 1)} /> : <span className="art-thumb-ph" />}
+      <span className="art-pick-num">{index + 1}</span>
+      {on && <span className="art-pick-check">✓</span>}
+      {busy && <span className="art-pick-busy"><span className="spinner small" aria-hidden="true"></span></span>}
+    </button>
   );
 }
 

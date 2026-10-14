@@ -1006,7 +1006,7 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
               disabled={!ART_FORMATS.includes(local.format) || !local.title?.trim()}
               title={ART_FORMATS.includes(local.format) ? "Criar a arte com os arquivos, o texto e o briefing desta peça" : "A arte automática é para Estático, Carrossel e Story"}
             >
-              🎨 Criar arte
+              {(local.attachments || []).some((a) => a?.art) ? "✏️ Editar arte" : "🎨 Criar arte"}
             </button>
           </div>
           {(local.attachments || []).some((a) => a?.art) && (
@@ -1211,6 +1211,7 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
                   art: (local.attachments || []).filter((a) => a?.art)
                 }
               ]}
+              onCreated={(updated) => setLocal((l) => ({ ...l, attachments: [...(updated.art || []), ...(l.attachments || []).filter((x) => !x?.art)] }))}
               onClose={() => setArtOpen(false)}
               showToast={showToast}
             />

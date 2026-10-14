@@ -295,10 +295,10 @@ export default function WeekContent({ client, isStaff, showToast, onOpenProducti
                                   <button
                                     type="button"
                                     className="mini-link"
-                                    title={entry.art?.length ? "Criar a arte de novo" : "Criar a arte deste post"}
+                                    title={entry.art?.length ? "Editar as páginas da arte" : "Criar a arte deste post"}
                                     onClick={() => setArtFor({ entries: [entry], week: false })}
                                   >
-                                    🎨 Arte
+                                    {entry.art?.length ? "✏️ Editar arte" : "🎨 Arte"}
                                   </button>
                                 )}
                                 <button
