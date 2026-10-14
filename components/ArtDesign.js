@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "../lib/supabaseClient";
 import { ART_FORMATS } from "../lib/pipeline";
 
@@ -56,16 +57,89 @@ export function ArtThumb({ art, size = "xs", title = "Arte criada" }) {
 // feedback: mostra "Aprovar" e "Reprovar" (só a equipe), que ensinam as próximas artes do cliente
 export function ArtStrip({ art, feedback = false }) {
   const pages = (art || []).filter((a) => a?.path);
+  const [open, setOpen] = useState(null); // página aberta no visualizador
   if (!pages.length) return null;
   return (
     <>
       <div className="art-strip">
         {pages.map((a, i) => (
-          <ArtPage key={a.path} att={a} index={i} />
+          <ArtPage key={a.path} att={a} index={i} onOpen={() => setOpen(i)} />
         ))}
       </div>
       {feedback && pages[0].run && <ArtFeedback runId={pages[0].run} />}
+      {open !== null && <ArtViewer pages={pages} start={open} onClose={() => setOpen(null)} />}
     </>
+  );
+}
+
+// Visualizador das páginas da arte na própria tela: setas na tela ou ← → do teclado, Esc fecha
+function ArtViewer({ pages, start, onClose }) {
+  const [i, setI] = useState(start);
+  const total = pages.length;
+  const go = (d) => setI((x) => (x + d + total) % total);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "ArrowRight") go(1);
+      else if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "Escape") onClose();
+      else return;
+      // a tecla é do visualizador: não fecha o card nem rola a página
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, onClose]);
+  const url = useSignedUrl(pages[i].path);
+  // já busca as páginas vizinhas para a troca ser instantânea
+  useSignedUrl(pages[(i + 1) % total].path);
+  useSignedUrl(pages[(i - 1 + total) % total].path);
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="art-viewer"
+      role="dialog"
+      aria-label="Páginas da arte"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="art-viewer-top">
+        <span>{total > 1 ? `${i + 1} de ${total}` : "Arte"}</span>
+        <div className="art-viewer-actions">
+          {url && (
+            <a className="btn btn-plain btn-sm" href={url} download={pages[i].name || `arte-${i + 1}.png`} target="_blank" rel="noopener noreferrer">
+              ⬇ Baixar
+            </a>
+          )}
+          <button type="button" className="btn btn-plain btn-sm" onClick={onClose} title="Fechar (Esc)">
+            ✕
+          </button>
+        </div>
+      </div>
+      {total > 1 && (
+        <button type="button" className="art-viewer-nav prev" onClick={() => go(-1)} aria-label="Página anterior (seta para a esquerda)">
+          ‹
+        </button>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url ? <img className="art-viewer-img" src={url} alt={pages[i].name || `Página ${i + 1}`} /> : <span className="spinner" aria-hidden="true"></span>}
+      {total > 1 && (
+        <button type="button" className="art-viewer-nav next" onClick={() => go(1)} aria-label="Próxima página (seta para a direita)">
+          ›
+        </button>
+      )}
+      {total > 1 && (
+        <div className="art-viewer-dots">
+          {pages.map((pg, k) => (
+            <button key={pg.path} type="button" className={k === i ? "on" : ""} onClick={() => setI(k)} aria-label={`Página ${k + 1}`} />
+          ))}
+        </div>
+      )}
+    </div>,
+    document.body
   );
 }
 
@@ -118,13 +192,13 @@ function ArtFeedback({ runId }) {
   );
 }
 
-function ArtPage({ att, index }) {
+function ArtPage({ att, index, onOpen }) {
   const url = useSignedUrl(att.path);
   return (
-    <a className="art-page" href={url || undefined} target="_blank" rel="noopener noreferrer" title={"Abrir " + (att.name || "a arte")}>
+    <button type="button" className="art-page" onClick={onOpen} title={"Ver " + (att.name || "a arte")}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {url ? <img src={url} alt={att.name || "Arte página " + (index + 1)} /> : <span className="art-thumb-ph" />}
-    </a>
+    </button>
   );
 }
 
