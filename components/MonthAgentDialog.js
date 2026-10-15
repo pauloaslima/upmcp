@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { MONTHS } from "./Calendar";
 import { PROFILE_FIELDS } from "../lib/profileFields";
+import { isReplaceable } from "../lib/monthRequest";
 
 const SOURCES = [
   { id: "perfil", label: "Automático", icon: "✨" },
@@ -19,16 +20,23 @@ function getRecognizer() {
 }
 
 // "Criar calendário": o agente monta os temas do mês seguindo a estratégia escolhida.
-export default function MonthAgentDialog({ client, year, month, existingCount, initialSource, onClose, onCreated, showToast }) {
-  const [source, setSource] = useState(initialSource || "perfil");
-  const [extra, setExtra] = useState(""); // orientação opcional no modo automático
+// O pedido (texto, áudio transcrito, orientação, posts por semana) fica gravado no mês: ao abrir de novo
+// ele já vem preenchido para editar e gerar outra vez, trocando os temas que o agente criou antes.
+export default function MonthAgentDialog({ client, year, month, entries = [], saved, initialSource, onClose, onCreated, onRemoved, onSaved, showToast }) {
+  const existingCount = entries.length;
+  const pick = (id) => (saved?.source === id ? saved.strategy || "" : "");
+  const [source, setSource] = useState(initialSource || saved?.source || "perfil");
+  const [extra, setExtra] = useState(pick("perfil")); // orientação opcional no modo automático
   const filled = PROFILE_FIELDS.filter((f) => (client[f.key] || "").trim());
   const missing = PROFILE_FIELDS.filter((f) => !(client[f.key] || "").trim());
-  const [text, setText] = useState("");
-  const [audioText, setAudioText] = useState("");
+  const [text, setText] = useState(pick("texto"));
+  const [audioText, setAudioText] = useState(pick("audio"));
   const [interim, setInterim] = useState("");
   const [listening, setListening] = useState(false);
-  const [perWeek, setPerWeek] = useState("");
+  const [perWeek, setPerWeek] = useState(saved?.posts_per_week ? String(saved.posts_per_week) : "");
+  const replaceable = entries.filter(isReplaceable);
+  const [replace, setReplace] = useState(!!saved && replaceable.length > 0);
+  const kept = existingCount - (replace ? replaceable.length : 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -105,17 +113,33 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
           month: `${year}-${String(month).padStart(2, "0")}`,
           source,
           strategy,
-          posts_per_week: perWeek ? Number(perWeek) : null
+          posts_per_week: perWeek ? Number(perWeek) : null,
+          replace: replace && replaceable.length > 0
         })
       });
       const json = await res.json().catch(() => ({}));
+      // o pedido é gravado antes de gerar, então mesmo com erro ele já fica salvo para tentar de novo
+      if (res.status !== 401 && res.status !== 403)
+        onSaved?.({
+          ...(saved || { source: "perfil", strategy: "" }),
+          ...(strategy.trim() ? { source, strategy: strategy.trim() } : {}),
+          client_id: client.id,
+          month: `${year}-${String(month).padStart(2, "0")}`,
+          posts_per_week: perWeek ? Number(perWeek) : null,
+          updated_at: new Date().toISOString()
+        });
       if (!res.ok) {
         setError(json.error || "Não consegui criar o calendário agora.");
         return;
       }
       onCreated(json.criados || []);
+      if (json.removidos?.length) onRemoved?.(json.removidos);
       setResult(json);
-      showToast(`${(json.criados || []).length} tema(s) criados no calendário de ${MONTHS[month - 1]}.`);
+      showToast(
+        json.removidos?.length
+          ? `Calendário de ${MONTHS[month - 1]} gerado de novo: ${(json.criados || []).length} tema(s) novos.`
+          : `${(json.criados || []).length} tema(s) criados no calendário de ${MONTHS[month - 1]}.`
+      );
     } catch (err) {
       console.error(err);
       setError("Não consegui falar com o servidor. Confira a internet e tente de novo.");
@@ -131,7 +155,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
       <form className="modal modal-md" onSubmit={run}>
         <div className="modal-head">
           <div style={{ flex: 1 }}>
-            <h3 className="entry-title">✨ Criar calendário</h3>
+            <h3 className="entry-title">{saved ? "✏️ Editar pedido do mês" : "✨ Criar calendário"}</h3>
             <div className="entry-date">
               {client.name} · {monthName}
             </div>
@@ -146,6 +170,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
             <>
               <div className="agent-done">
                 <strong>{result.criados.length} tema(s) criados</strong> em {monthName}, marcados como “Conteúdo criado”.
+                {result.removidos?.length > 0 && <> Os {result.removidos.length} tema(s) da versão anterior saíram.</>}
                 {result.resumo && <p>{result.resumo}</p>}
               </div>
               <ul className="agent-list">
@@ -170,6 +195,12 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
             </>
           ) : (
             <>
+              {saved && (
+                <div className="month-saved">
+                  <strong>📝 Pedido gravado em {savedWhen(saved.updated_at)}.</strong> Ele já está preenchido abaixo: complete o que faltou e gere de novo,
+                  sem escrever tudo outra vez.
+                </div>
+              )}
               <div>
                 <label>Estratégia do mês</label>
                 <div className="seg source-seg" role="tablist">
@@ -290,9 +321,18 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
                 </div>
               </div>
 
-              {existingCount > 0 && (
+              {replaceable.length > 0 && (
+                <label className="month-replace">
+                  <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} disabled={busy} />
+                  <span>
+                    <strong>{replaceable.length === 1 ? "Trocar o tema que o agente criou antes" : `Trocar os ${replaceable.length} temas que o agente criou antes`}</strong>
+                    <small>Os temas feitos à mão, os que já foram para a produção e os que têm fotos ou arte ficam.</small>
+                  </span>
+                </label>
+              )}
+              {kept > 0 && (
                 <div className="hint warn">
-                  {monthName} já tem {existingCount} tema(s). Eles continuam como estão; o agente completa o mês em volta deles.
+                  {kept} tema(s) de {monthName} continuam como estão; o agente completa o mês em volta deles.
                 </div>
               )}
               {source !== "perfil" && !client.positioning && !client.identity && (
@@ -312,7 +352,7 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
                   Cancelar
                 </button>
                 <button type="submit" className="btn btn-gold" disabled={busy}>
-                  {busy ? "Criando…" : "Criar calendário"}
+                  {busy ? "Criando…" : saved ? "Gerar de novo" : "Criar calendário"}
                 </button>
               </div>
             </>
@@ -321,4 +361,12 @@ export default function MonthAgentDialog({ client, year, month, existingCount, i
       </form>
     </div>
   );
+}
+
+// "15/10 às 14h30"
+function savedWhen(at) {
+  const d = new Date(at);
+  if (isNaN(d)) return "este mês";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)} às ${d.getHours()}h${d.getMinutes() ? p(d.getMinutes()) : ""}`;
 }

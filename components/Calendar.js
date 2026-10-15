@@ -86,7 +86,7 @@ export function EntryChip({ entry, onClick, dragProps, forClient = false }) {
 
 // onMove(entry, novoDia): arrastar um tema para outro dia. onAi: abre o "Criar calendário".
 // onClear: abre o "Limpar mês".
-export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi, onClear }) {
+export default function Calendar({ year, month, entries, readOnly, client, showToast, onPrev, onNext, onToday, onCreate, onUpdate, onDelete, onMove, onAi, aiLabel, onClear }) {
   const [editing, setEditing] = useState(null); // { day } para novo, { entry } para existente
   const [dragging, setDragging] = useState(null); // tema sendo arrastado
   const [dropDay, setDropDay] = useState(null);
@@ -115,8 +115,8 @@ export default function Calendar({ year, month, entries, readOnly, client, showT
       {!readOnly && (onAi || onMove || onClear) && (
         <div className="cal-toolbar">
           {onAi && (
-            <button className="btn btn-gold" onClick={() => onAi()}>
-              ✨ Criar calendário
+            <button className="btn btn-gold" onClick={() => onAi()} title={aiLabel ? "Abrir o pedido usado para criar este mês, editar e gerar de novo" : ""}>
+              {aiLabel || "✨ Criar calendário"}
             </button>
           )}
           {onClear && (

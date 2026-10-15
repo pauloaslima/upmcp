@@ -5,6 +5,7 @@ import { MONTH_NAMES, addDays, calendarTask, iso, mondayOf, parse, todayInBrazil
 import { MONTH_CAMPAIGNS, specialDates } from "../../../lib/holidays";
 import { PROFILE_FIELDS } from "../../../lib/profileFields";
 import { briefDescription, briefWithDefaults } from "../../../lib/brief";
+import { isReplaceable } from "../../../lib/monthRequest";
 
 // Agente de conteúdo dentro do sistema. Só para a equipe logada.
 //
@@ -15,7 +16,9 @@ import { briefDescription, briefWithDefaults } from "../../../lib/brief";
 // Rascunho: POST { mode: "draft", client_id, day, draft: { theme, format, editorial_line, post_time, notes } }
 //          → gera um post a partir do que a pessoa escreveu no "Novo tema", sem gravar
 // Mês:     POST { mode: "month", client_id, month: "AAAA-MM", source: "historico"|"texto"|"audio",
-//                 strategy, posts_per_week }
+//                 strategy, posts_per_week, replace }
+//          o pedido fica gravado (calendar_month_requests) para editar e gerar de novo;
+//          replace: true troca os temas que o agente criou antes no mês (os que ainda não foram para a produção)
 //          → cria o calendário de temas do mês em volta do que já existe
 
 export const dynamic = "force-dynamic";
@@ -38,7 +41,7 @@ export async function POST(request) {
   if (!client || (client.admin_only && me.role !== "admin")) return Response.json({ error: "Cliente não encontrado." }, { status: 404 });
 
   try {
-    if (body.mode === "month") return await runMonth(db, client, body);
+    if (body.mode === "month") return await runMonth(db, client, body, auth.user.id);
     if (body.mode === "entry") return await runEntry(db, client, body);
     if (body.mode === "draft") return await runDraft(db, client, body);
     return await runWeek(db, client, body);
@@ -233,7 +236,7 @@ async function oneForDay(db, client, day, extra) {
   return { row: rows[0] || null, resumo: result.resumo };
 }
 
-async function runMonth(db, client, body) {
+async function runMonth(db, client, body, userId) {
   if (!/^\d{4}-\d{2}$/.test(body.month || "")) return Response.json({ error: "Informe o mês." }, { status: 400 });
   const source = ["perfil", "historico", "texto", "audio"].includes(body.source) ? body.source : "perfil";
   const strategy = String(body.strategy || "").trim().slice(0, 8000);
@@ -242,6 +245,13 @@ async function runMonth(db, client, body) {
   }
   const postsPerWeek = Number.isInteger(body.posts_per_week) && body.posts_per_week > 0 && body.posts_per_week <= 14 ? body.posts_per_week : null;
 
+  // grava o pedido antes de gerar: se der erro, o texto não se perde.
+  // Sem texto (ex.: "Meses anteriores"), o texto gravado antes continua lá.
+  const request = { client_id: client.id, month: body.month, posts_per_week: postsPerWeek, updated_by: userId, updated_at: new Date().toISOString() };
+  if (strategy) Object.assign(request, { source, strategy });
+  const { error: saveErr } = await db.from("calendar_month_requests").upsert(request);
+  if (saveErr) console.error("pedido do mês:", saveErr);
+
   const [y, m] = body.month.split("-").map(Number);
   const first = new Date(y, m - 1, 1);
   const last = new Date(y, m, 0);
@@ -249,7 +259,7 @@ async function runMonth(db, client, body) {
   const fim = iso(last);
 
   const [{ data: existing }, { data: history }] = await Promise.all([
-    db.from("calendar_entries").select("day, format, theme, post_time").eq("client_id", client.id).gte("day", inicio).lte("day", fim).order("day"),
+    db.from("calendar_entries").select("id, day, format, theme, post_time, created_by_agent, card_id, photos, art").eq("client_id", client.id).gte("day", inicio).lte("day", fim).order("day"),
     db
       .from("calendar_entries")
       .select("day, format, theme, post_time, editorial_line")
@@ -280,8 +290,14 @@ async function runMonth(db, client, body) {
     prazo_do_calendario: calendarTask(y, m).due
   };
 
+  // gerar de novo: saem os temas do agente que ainda não foram para a produção e não têm fotos nem arte
+  // (só depois de gravar os novos; temas feitos à mão ou já trabalhados ficam)
+  const replaced = body.replace ? (existing || []).filter(isReplaceable) : [];
+  const replacedIds = new Set(replaced.map((e) => e.id));
+  const keep = (existing || []).filter((e) => !replacedIds.has(e.id)).map(({ day, format, theme, post_time }) => ({ day, format, theme, post_time }));
+
   const context = await clientContext(db, client, { withFiles: false });
-  const result = await generateMonth({ context, month, source, strategy, history: history || [], existing: existing || [], postsPerWeek });
+  const result = await generateMonth({ context, month, source, strategy, history: history || [], existing: keep, postsPerWeek });
 
   const { rows } = cleanAgentEntries(client.id, result.temas);
   if (!rows.length) return Response.json({ error: "Nenhum tema foi gerado para esse mês. Tente com outra estratégia." }, { status: 422 });
@@ -290,5 +306,11 @@ async function runMonth(db, client, body) {
     console.error(error);
     return Response.json({ error: "Criei os temas, mas não consegui gravar." }, { status: 500 });
   }
-  return Response.json({ ok: true, resumo: result.resumo, criados: created });
+  let removidos = [];
+  if (replacedIds.size) {
+    const { error: delErr } = await db.from("calendar_entries").delete().in("id", [...replacedIds]);
+    if (delErr) console.error("trocar temas:", delErr);
+    else removidos = [...replacedIds];
+  }
+  return Response.json({ ok: true, resumo: result.resumo, criados: created, removidos });
 }

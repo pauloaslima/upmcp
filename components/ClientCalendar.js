@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { isoDate } from "../lib/holidays";
 import { defaultDueAt } from "../lib/brief";
 import { useCalendarEntries } from "../lib/useCalendarEntries";
@@ -13,9 +14,27 @@ import ClearDialog from "./ClearDialog";
 export default function ClientCalendar({ client, readOnly, year, month, onPrev, onNext, onToday, showToast }) {
   const first = isoDate(new Date(year, month - 1, 1));
   const last = isoDate(new Date(year, month, 0));
-  const { entries, create, update, remove, removeMany, addLocal } = useCalendarEntries(client.id, first, last, showToast);
+  const { entries, create, update, remove, removeMany, addLocal, dropLocal } = useCalendarEntries(client.id, first, last, showToast);
   const [aiOpen, setAiOpen] = useState(null); // null = fechado; senão, o modo inicial ("perfil", "historico"…)
   const [clearOpen, setClearOpen] = useState(false);
+  const monthKey = first.slice(0, 7);
+  const [saved, setSaved] = useState(null); // pedido gravado deste mês (texto/áudio usado para criar)
+
+  useEffect(() => {
+    if (readOnly) return;
+    let alive = true;
+    setSaved(null);
+    supabase
+      .from("calendar_month_requests")
+      .select("*")
+      .eq("client_id", client.id)
+      .eq("month", monthKey)
+      .maybeSingle()
+      .then(({ data }) => alive && setSaved(data || null));
+    return () => {
+      alive = false;
+    };
+  }, [client.id, monthKey, readOnly]);
 
   // arrastar um tema para outro dia; o prazo automático do design acompanha a data
   async function move(entry, day) {
@@ -42,7 +61,8 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
         onUpdate={update}
         onDelete={remove}
         onMove={readOnly ? null : move}
-        onAi={readOnly ? null : (source) => setAiOpen(source || "perfil")}
+        onAi={readOnly ? null : (source) => setAiOpen(source || saved?.source || "perfil")}
+        aiLabel={saved ? "✏️ Editar pedido do mês" : null}
         onClear={readOnly ? null : () => setClearOpen(true)}
         client={client}
         showToast={showToast}
@@ -52,10 +72,13 @@ export default function ClientCalendar({ client, readOnly, year, month, onPrev, 
           client={client}
           year={year}
           month={month}
-          existingCount={entries.length}
+          entries={entries}
+          saved={saved}
           initialSource={aiOpen}
           onClose={() => setAiOpen(null)}
           onCreated={addLocal}
+          onRemoved={dropLocal}
+          onSaved={setSaved}
           showToast={showToast}
         />
       )}
