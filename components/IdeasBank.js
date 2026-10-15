@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-// Banco de ideias do cliente (só a equipe): categoria, descrição e link, em tabela.
+// Banco de ideias do cliente (só a equipe): assunto, descrição e link, em tabela.
 export default function IdeasBank({ client, me, showToast }) {
   const [rows, setRows] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -79,8 +79,8 @@ export default function IdeasBank({ client, me, showToast }) {
         </div>
         <div className="ideas-actions">
           {categories.length > 1 && (
-            <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filtrar por categoria">
-              <option value="">Todas as categorias</option>
+            <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filtrar por assunto">
+              <option value="">Todos os assuntos</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -101,7 +101,7 @@ export default function IdeasBank({ client, me, showToast }) {
           <table className="ads-table ideas-table">
             <thead>
               <tr>
-                <th>Categoria</th>
+                <th>Assunto</th>
                 <th>Descrição</th>
                 <th>Link</th>
                 <th aria-label="Ações"></th>
@@ -110,7 +110,7 @@ export default function IdeasBank({ client, me, showToast }) {
             <tbody>
               {visible.map((r) => (
                 <tr key={r.id}>
-                  <td className="ideas-cat">{r.category ? <span className="ideas-tag">{r.category}</span> : <span className="hint">Sem categoria</span>}</td>
+                  <td className="ideas-cat">{r.category ? <span className="ideas-tag">{r.category}</span> : <span className="hint">Sem assunto</span>}</td>
                   <td className="ideas-desc">{r.description}</td>
                   <td className="ideas-link">
                     {r.link ? (
@@ -147,7 +147,7 @@ export default function IdeasBank({ client, me, showToast }) {
             </div>
             <div className="modal-body">
               <div>
-                <label htmlFor="idea-cat">Categoria</label>
+                <label htmlFor="idea-cat">Assunto</label>
                 <input
                   id="idea-cat"
                   type="text"

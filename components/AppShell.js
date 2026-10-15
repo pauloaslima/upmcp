@@ -49,7 +49,7 @@ const SECTIONS = {
     { id: "perfil", title: "Perfil do cliente", icon: "🪪", text: "Posicionamento, identidade visual, observações e link do Drive." },
     { id: "anuncios", title: "Anúncios", icon: "📣", text: "Campanhas da Meta: investimento, alcance e resultados por período." },
     { id: "organico", title: "Insights orgânicos", icon: "📈", text: "Posts do Instagram com alcance, curtidas, comentários e salvos." },
-    { id: "ideias", title: "Banco de ideias", icon: "💡", text: "Ideias, referências e links por categoria. Só a equipe vê." }
+    { id: "ideias", title: "Banco de ideias", icon: "💡", text: "Ideias, referências e links por assunto. Só a equipe vê." }
   ],
   cliente: [
     { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os posts planejados para esta semana." },
