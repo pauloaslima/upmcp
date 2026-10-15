@@ -18,6 +18,7 @@ import { ClientProfile } from "./ClientProfile";
 import AssignmentsPage from "./AssignmentsPage";
 import AdsPage from "./AdsPage";
 import OrganicPage from "./OrganicPage";
+import IdeasBank from "./IdeasBank";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -47,7 +48,8 @@ const SECTIONS = {
     { id: "producao", title: "Linha de produção", icon: "▦", text: "Todas as peças, da estruturação à publicação." },
     { id: "perfil", title: "Perfil do cliente", icon: "🪪", text: "Posicionamento, identidade visual, observações e link do Drive." },
     { id: "anuncios", title: "Anúncios", icon: "📣", text: "Campanhas da Meta: investimento, alcance e resultados por período." },
-    { id: "organico", title: "Insights orgânicos", icon: "📈", text: "Posts do Instagram com alcance, curtidas, comentários e salvos." }
+    { id: "organico", title: "Insights orgânicos", icon: "📈", text: "Posts do Instagram com alcance, curtidas, comentários e salvos." },
+    { id: "ideias", title: "Banco de ideias", icon: "💡", text: "Ideias, referências e links por categoria. Só a equipe vê." }
   ],
   cliente: [
     { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os posts planejados para esta semana." },
@@ -512,7 +514,7 @@ export default function AppShell({ session, profile }) {
               {view.section === "hub" && (
                 <div className="page-scroll">
                   <p className="hub-lead">{isStaff ? "O que você vai fazer com este cliente?" : "Olá! Escolha o que deseja ver."}</p>
-                  <div className={"hub-grid" + (sections.length === 5 ? " five" : sections.length === 6 ? " six" : "")}>
+                  <div className={"hub-grid" + (sections.length === 5 ? " five" : sections.length === 6 ? " six" : sections.length === 7 ? " seven" : "")}>
                     {sections.map((s) => (
                       <button key={s.id} className="hub-tile" onClick={() => openClient(current.id, s.id)}>
                         <span className="hub-icon" aria-hidden="true">
@@ -548,6 +550,12 @@ export default function AppShell({ session, profile }) {
                     showToast={showToast}
                     onSaved={(values) => setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, ...values } : c)))}
                   />
+                </div>
+              )}
+
+              {view.section === "ideias" && isStaff && (
+                <div className="page-scroll">
+                  <IdeasBank key={"ideas-" + current.id} client={current} me={session.user.id} showToast={showToast} />
                 </div>
               )}
 

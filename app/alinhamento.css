@@ -10,6 +10,7 @@
 .profile-panel,
 .ads-panel,
 .hub-panels,
+.ideas-panel,
 .tasks,
 .users,
 .routine-manager { width: 100%; max-width: var(--content-max); }
@@ -33,3 +34,32 @@
 .task { align-items: start; }
 .task input[type=checkbox] { align-self: start; margin-top: 2px; }
 .task-due { align-self: start; margin-top: 2px; }
+
+/* opções do cliente com 7 itens (equipe): 4 + 3, o último ocupa o espaço que sobra; tablet 2 por linha, o último inteiro */
+.hub-grid.seven { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.hub-grid.seven > :last-child { grid-column: span 2; }
+@media (max-width: 1100px) {
+  .hub-grid.seven { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hub-grid.seven > :last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) { .hub-grid.seven { grid-template-columns: 1fr; } .hub-grid.seven > :last-child { grid-column: auto; } }
+
+/* Banco de ideias */
+.ideas-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); }
+.ideas-panel .checklist-head h3 { margin: 0; }
+.ideas-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ideas-actions select { width: auto; }
+.ideas-table td { white-space: normal; }
+.ideas-table td.ideas-cat { width: 18%; }
+.ideas-table td.ideas-desc { color: var(--text); line-height: 1.5; white-space: pre-wrap; min-width: 220px; }
+.ideas-table td.ideas-link { width: 22%; word-break: break-all; }
+.ideas-table td.ideas-link a { color: var(--cal-accent, var(--gold-ink)); font-weight: 600; }
+.ideas-table td.ideas-row-actions { width: 1%; white-space: nowrap; text-align: right; }
+.ideas-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold-ink); font-size: 11.5px; font-weight: 700; }
+@media (max-width: 700px) {
+  .ideas-table thead { display: none; }
+  .ideas-table tr { display: block; border-top: 1px solid var(--border); padding: 8px 0; }
+  .ideas-table td { display: block; width: auto !important; border: none; padding: 4px 10px; }
+  .ideas-table td.ideas-row-actions { text-align: left; }
+}
+.ideas-modal .modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 22px 18px; border-top: 1px solid var(--border); }
