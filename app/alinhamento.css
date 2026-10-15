@@ -35,14 +35,17 @@
 .task input[type=checkbox] { align-self: start; margin-top: 2px; }
 .task-due { align-self: start; margin-top: 2px; }
 
-/* opções do cliente com 7 itens (equipe): 4 + 3, o último ocupa o espaço que sobra; tablet 2 por linha, o último inteiro */
+/* opções do cliente com 7 itens (equipe): 4 por linha, todos do mesmo tamanho (o espaço que sobra fica vazio) */
 .hub-grid.seven { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.hub-grid.seven > :last-child { grid-column: span 2; }
-@media (max-width: 1100px) {
-  .hub-grid.seven { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hub-grid.seven > :last-child { grid-column: 1 / -1; }
-}
-@media (max-width: 560px) { .hub-grid.seven { grid-template-columns: 1fr; } .hub-grid.seven > :last-child { grid-column: auto; } }
+@media (max-width: 1100px) { .hub-grid.seven { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .hub-grid.seven { grid-template-columns: 1fr; } }
+
+/* quadrados das opções do cliente mais compactos */
+.hub-grid { gap: 12px; }
+.hub-tile { min-height: 118px; padding: 14px 16px; gap: 6px; }
+.hub-icon { font-size: 22px; }
+.hub-title { font-size: 16px; }
+.hub-text { font-size: 12px; }
 
 /* Banco de ideias */
 .ideas-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); }
