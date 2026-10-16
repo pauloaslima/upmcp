@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeLink, removeFile, uploadFile } from "../lib/files";
-import { BRAND_KIT, MATERIAL_ACCEPT, MATERIAL_CATEGORIES, PROFILE_FIELDS } from "../lib/profileFields";
+import { ART_REFS, BRAND_KIT, MATERIAL_ACCEPT, MATERIAL_CATEGORIES, PROFILE_FIELDS } from "../lib/profileFields";
+import { ART_STYLES } from "../lib/art/styles";
 import { AttachmentList } from "./Board";
 import { useSignedUrl } from "./ArtDesign";
 
@@ -241,6 +242,14 @@ export function ClientProfile({ client, showToast, onSaved }) {
         onRemove={(target) => setDraft((d) => ({ ...d, materials: d.materials.filter((m) => m !== target) }))}
       />
 
+      <ArtRefs
+        items={v.materials.filter((m) => m.category === ART_REFS)}
+        editing={editing}
+        uploading={uploading}
+        onFiles={(e) => handleFiles(e, ART_REFS)}
+        onRemove={(target) => setDraft((d) => ({ ...d, materials: d.materials.filter((m) => m !== target) }))}
+      />
+
       <ArtConfig
         value={v.art_config || {}}
         editing={editing}
@@ -334,6 +343,29 @@ function ArtConfig({ value, editing, onChange }) {
         <label>Direção de arte</label>
         <span className="hint">Os agentes de design seguem estas escolhas em todas as artes deste cliente. Em branco, o diretor de arte decide pela identidade visual.</span>
       </div>
+      <div className="profile-field art-style-field">
+        <label htmlFor="ac-estilo_base">Estilo base das artes</label>
+        {editing ? (
+          <select id="ac-estilo_base" value={value.estilo_base || ""} onChange={(e) => onChange({ estilo_base: e.target.value })}>
+            <option value="">Sem estilo base (segue só a identidade e as referências)</option>
+            {ART_STYLES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}: {s.desc}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className={"profile-read" + (value.estilo_base ? "" : " empty")}>
+            {ART_STYLES.find((s) => s.id === value.estilo_base) ? (
+              <>
+                <strong>{ART_STYLES.find((s) => s.id === value.estilo_base).label}</strong>: {ART_STYLES.find((s) => s.id === value.estilo_base).desc}
+              </>
+            ) : (
+              "Não escolhido. Escolher um estilo ajuda as artes deste cliente a não ficarem parecidas com as dos outros."
+            )}
+          </div>
+        )}
+      </div>
       <div className="art-config-grid">
         {[
           ["fonte_titulo", "Fonte dos títulos"],
@@ -367,6 +399,54 @@ function ArtConfig({ value, editing, onChange }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Referências visuais das artes: imagens com o estilo que o cliente quer (vão para o gerador como referência)
+function ArtRefs({ items, editing, uploading, onFiles, onRemove }) {
+  const ref = useRef(null);
+  return (
+    <div className="brand-kit">
+      <div className="materials-head">
+        <label>Referências visuais das artes</label>
+        <span className="hint">
+          De 2 a 4 imagens com o estilo que o cliente quer (posts de que ele gosta, do próprio feed ou de outras marcas). O designer segue as cores, as letras, as
+          texturas e a composição, sem copiar. As artes aprovadas pela equipe também viram referência.
+        </span>
+      </div>
+      {items.length === 0 && <div className="profile-read empty">Nenhuma referência ainda. Sem referência, o estilo depende só da identidade e do estilo base.</div>}
+      {items.length > 0 && (
+        <div className="art-refs-grid">
+          {items.map((it, i) => (
+            <ArtRefItem key={it.path} item={it} extra={i >= 3} editing={editing} onRemove={() => onRemove(it)} />
+          ))}
+        </div>
+      )}
+      {editing && (
+        <div className="materials-upload">
+          <button className="file-btn" disabled={uploading} onClick={() => ref.current?.click()}>
+            🖼️ {uploading ? "Enviando…" : "Enviar referências"}
+          </button>
+          <input type="file" multiple accept=".png,.jpg,.jpeg,.webp" ref={ref} hidden onChange={onFiles} />
+          {items.length > 3 && <span className="hint">As 3 primeiras são usadas em cada arte.</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ArtRefItem({ item, extra, editing, onRemove }) {
+  const url = useSignedUrl(item.path);
+  return (
+    <div className={"art-ref-item" + (extra ? " extra" : "")}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url ? <img src={url} alt={item.name} /> : <span className="art-thumb-ph" />}
+      {editing && (
+        <button type="button" className="art-page-edit danger art-ref-remove" onClick={onRemove} title="Remover referência" aria-label="Remover referência">
+          ✕
+        </button>
+      )}
     </div>
   );
 }

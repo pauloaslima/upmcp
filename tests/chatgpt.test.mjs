@@ -68,3 +68,14 @@ test("pedido: texto exato, foto preservada, área livre para a marca e sem logo 
   assert.match(middle, /Image 1 is slide 1/);
   assert.match(middle, /MIDDLE slide/);
 });
+
+test("capa com referências de estilo do cliente e estilo base", () => {
+  const size = { width: 1080, height: 1350 };
+  const prompt = buildSlidePrompt({ client: { name: "X" }, config: { estilo_base: "editorial" }, post: {}, page: { texto: "a" }, index: 0, total: 5, photoRole: "photo", styleRefs: 2, size });
+  assert.match(prompt, /Images 2 to 3 are STYLE REFERENCES/);
+  assert.match(prompt, /BASE STYLE: editorial minimalist/);
+  assert.match(prompt, /AVOID THE GENERIC TEMPLATE LOOK/);
+  const one = buildSlidePrompt({ client: { name: "X" }, post: {}, page: { texto: "a" }, index: 0, total: 1, styleRefs: 1, size });
+  assert.match(one, /Image 1 is a STYLE REFERENCE/);
+  assert.doesNotMatch(one, /BASE STYLE/);
+});
