@@ -1205,6 +1205,7 @@ function CardModal({ card, client, onClose, onSave, onDelete, onReceived, showTo
                 {
                   id: card.id,
                   cardOnly: true,
+                  photos: (local.attachments || []).filter((a) => a?.type === "upload" && !a.art && !a.ref && /\.(png|jpe?g|webp|gif|hei[cf])$/i.test(a.name || a.path || "")),
                   theme: local.title,
                   format: local.format,
                   day: local.publish_date || "",

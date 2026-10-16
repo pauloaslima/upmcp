@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "../lib/supabaseClient";
 import { ART_FORMATS } from "../lib/pipeline";
+import { suggestPhotos } from "../lib/photoBank";
+import { BankPicker } from "./PhotoBank";
 
 // Artes criadas pelo sistema: miniatura (calendário, Conteúdo da semana, Linha de produção)
 // e a janela "Criar arte" (um post ou a semana inteira). Os botões são só da equipe.
@@ -343,6 +345,10 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
     };
   }, []);
   const [guidance, setGuidance] = useState("");
+  // post sem foto anexada: as fotos vêm do banco do cliente (sugeridas, e a equipe pode trocar)
+  const hasOwnPhotos = single && (entries[0].photos || []).some((f) => f?.type === "upload" && f.path);
+  const useBank = single && !hasOwnPhotos;
+  const [bankPick, setBankPick] = useState(new Set());
   const [picked, setPicked] = useState(() => new Set(entries.filter((e) => single || !e.art?.length).map((e) => e.id)));
   const [status, setStatus] = useState({}); // entry id -> { state: "fila" | "criando" | "ok" | "erro", msg, alertas }
   const [running, setRunning] = useState(false);
@@ -353,7 +359,14 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
   async function createOne(entry) {
     setStatus((s) => ({ ...s, [entry.id]: { state: "criando", etapa: "Começando" } }));
     try {
-      let { ok, json } = await callArt({ action: "start", client_id: client.id, ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }), mode, guidance });
+      let { ok, json } = await callArt({
+        action: "start",
+        client_id: client.id,
+        ...(entry.cardOnly ? { card_id: entry.id } : { entry_id: entry.id }),
+        mode,
+        guidance,
+        ...(useBank ? { bank_photos: [...bankPick] } : {})
+      });
       let guard = 0;
       while (ok && json.run && !json.run.final && guard++ < 12) {
         const r = json.run;
@@ -441,6 +454,24 @@ export function ArtDialog({ client, entries, week = false, onCreated, onClose, s
             A logo ou a assinatura do perfil entram por cima, sempre iguais.
             {caps && !caps.geracao && <span className="hint warn"> Aguardando a configuração da OPENAI_API_KEY na Vercel.</span>}
           </div>
+
+          {useBank && (
+            <div>
+              <label>Fotos do banco do cliente</label>
+              <BankPicker
+                clientId={client.id}
+                value={bankPick}
+                onChange={setBankPick}
+                disabled={running}
+                onLoaded={(bank) => setBankPick(new Set(suggestPhotos(bank, { theme: entries[0].theme, format: entries[0].format })))}
+              />
+              <p className="hint">
+                Este post não tem foto anexada: já deixei marcadas as sugeridas (etiqueta parecida com o tema e menos usadas). Clique para trocar; sem nenhuma
+                marcada, a arte sai só com fundos e texturas.
+              </p>
+            </div>
+          )}
+          {!single && <p className="hint">Posts sem foto anexada usam as fotos sugeridas do banco de fotos do cliente, sem repetir a mesma foto.</p>}
 
           <div>
             <label htmlFor="art-guidance">Orientação para o designer (opcional)</label>

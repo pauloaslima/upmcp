@@ -64,7 +64,7 @@ export async function POST(request) {
         ? await continueArtRun(db, body.run_id, budget())
         : await startArtRun(
             db,
-            { client_id: body.client_id, entry_id: body.entry_id, card_id: body.card_id, mode: body.mode, guidance: body.guidance, enhance: body.enhance, userId: auth.user.id },
+            { client_id: body.client_id, entry_id: body.entry_id, card_id: body.card_id, mode: body.mode, guidance: body.guidance, enhance: body.enhance, userId: auth.user.id, bank_photos: Array.isArray(body.bank_photos) ? body.bank_photos : undefined },
             budget()
           );
     const summary = await runSummary(db, run);

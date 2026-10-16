@@ -19,6 +19,7 @@ import AssignmentsPage from "./AssignmentsPage";
 import AdsPage from "./AdsPage";
 import OrganicPage from "./OrganicPage";
 import IdeasBank from "./IdeasBank";
+import PhotoBank from "./PhotoBank";
 
 const VIEW_KEY = "upfluxo:view";
 const SIDEBAR_KEY = "upfluxo:sidebar";
@@ -49,7 +50,8 @@ const SECTIONS = {
     { id: "perfil", title: "Perfil do cliente", icon: "🪪", text: "Posicionamento, identidade visual, observações e link do Drive." },
     { id: "anuncios", title: "Anúncios", icon: "📣", text: "Campanhas da Meta: investimento, alcance e resultados por período." },
     { id: "organico", title: "Insights orgânicos", icon: "📈", text: "Posts do Instagram com alcance, curtidas, comentários e salvos." },
-    { id: "ideias", title: "Banco de ideias", icon: "💡", text: "Ideias, referências e links por assunto. Só a equipe vê." }
+    { id: "ideias", title: "Banco de ideias", icon: "💡", text: "Ideias, referências e links por assunto. Só a equipe vê." },
+    { id: "fotos", title: "Banco de fotos", icon: "📷", text: "Fotos do cliente para as artes, enviadas uma vez só. Só a equipe vê." }
   ],
   cliente: [
     { id: "semana", title: "Conteúdo da semana", icon: "✍️", text: "Os posts planejados para esta semana." },
@@ -232,6 +234,13 @@ export default function AppShell({ session, profile }) {
       `Excluir o cliente "${current.name}"?\n\nO calendário dele será apagado, e as peças da linha de produção ficam sem cliente.`
     );
     if (!ok) return;
+    // os arquivos do banco de fotos não saem sozinhos com o cliente: apaga antes
+    const { data: s } = await supabase.auth.getSession();
+    await fetch("/api/photo-bank", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + (s.session?.access_token || "") },
+      body: JSON.stringify({ action: "purge", client_id: current.id })
+    }).catch(() => null);
     const { error } = await supabase.from("clients").delete().eq("id", current.id);
     if (error) {
       showToast("Não consegui excluir o cliente.");
@@ -550,6 +559,12 @@ export default function AppShell({ session, profile }) {
                     showToast={showToast}
                     onSaved={(values) => setClients((prev) => prev.map((c) => (c.id === current.id ? { ...c, ...values } : c)))}
                   />
+                </div>
+              )}
+
+              {view.section === "fotos" && isStaff && (
+                <div className="page-scroll">
+                  <PhotoBank key={"photos-" + current.id} client={current} showToast={showToast} />
                 </div>
               )}
 

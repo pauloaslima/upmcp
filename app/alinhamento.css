@@ -73,3 +73,18 @@
 .month-replace input { margin-top: 3px; }
 .month-replace span { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--text); }
 .month-replace small { font-size: 11.5px; color: var(--text-faint); }
+
+/* Banco de fotos */
+.photo-bank-seg { margin: 6px 0 12px; }
+.photo-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .photo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.photo-tile { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 6px; background: var(--surface-2); }
+.photo-tile.off .photo-img img { opacity: .45; filter: grayscale(.6); }
+.photo-img { position: relative; aspect-ratio: 1 / 1; border-radius: 7px; overflow: hidden; background: var(--surface); display: flex; }
+.photo-img img { width: 100%; height: 100%; object-fit: cover; }
+.photo-used { position: absolute; left: 5px; bottom: 5px; padding: 1px 7px; border-radius: 999px; background: rgba(0, 0, 0, .6); color: #fff; font-size: 10.5px; font-weight: 700; }
+.photo-tile input.photo-tags { padding: 5px 7px; font-size: 12px; }
+.photo-actions { display: flex; justify-content: space-between; gap: 4px; flex-wrap: wrap; }
+.photo-actions .mini-link { padding: 3px 4px; font-size: 11px; }
+.bank-pick { max-height: 260px; overflow-y: auto; }
